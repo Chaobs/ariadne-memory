@@ -29,9 +29,10 @@
 | 🔍 **语义搜索** | 基于向量数据库的语义相似度搜索，返回最相关结果 |
 | 🧠 **记忆持久化** | ChromaDB 本地持久化存储，数据完全归你所有 |
 | 🔗 **知识图谱**（规划中）| 自动识别实体与关系，构建跨源知识关联网络 |
-| 🤖 **AI 增强**（规划中）| 调用 DeepSeek / Qwen / ChatGPT / Claude / Gemini / Grok 等主流 AI 接口进行增强检索与智能摘要 |
-| 🔌 **MCP Server**（规划中）| 提供 MCP 工具接口，可接入 Claude Code / WorkBuddy / Cursor 等 AI 工具 |
-| 📚 **学术友好** | 特别针对论文、文献、笔记场景优化，支持 EPUB/MOBI 电子书（规划中）|
+| 🤖 **AI 增强**（P2 规划中）| 调用 DeepSeek / Claude 等主流 AI 接口进行增强检索与智能摘要 |
+| 🧮 **知识图谱**（P3 规划中）| 实体识别 + 跨源关联 + 时间线视图 |
+| 📚 **媒体支持**（P4 规划中）| EPUB/MOBI 电子书、图片 OCR、扫描 PDF、学术文献元数据 |
+| 🔌 **MCP Server**（P5 规划中）| 提供 MCP 工具接口，可接入 Claude Code / WorkBuddy / Cursor |
 
 ---
 
@@ -48,7 +49,7 @@
 | 思维导图 | `.mm` / `.xmind` | `MindMapIngestor` | 保留树形结构作为上下文 |
 | 代码 | `.py/.java/.cpp/.js` | `CodeIngestor` | AST/正则提取函数、类、文档字符串 |
 
-> 📖 **规划中**: EPUB、MOBI 等电子书格式（第五阶段）
+> 📖 **第四阶段规划**: EPUB / MOBI 电子书、图片 OCR、扫描 PDF 识别、学术文献元数据（BibTeX / RIS）
 
 ---
 
@@ -138,9 +139,9 @@ ariadne-memory/
 │   │   └── code.py          # 代码注释摄入器
 │   ├── memory/              # 向量记忆存储层
 │   │   └── store.py         # ChromaDB 向量存储实现
-│   ├── graph/               # 知识图谱（第三阶段）
 │   ├── llm/                 # LLM 统一接口（第二阶段）
-│   └── mcp/                 # MCP Server（第四阶段）
+│   ├── graph/               # 知识图谱（第三阶段）
+│   └── mcp/                 # MCP Server（第五阶段）
 └── tests/
 ```
 
@@ -161,11 +162,15 @@ ariadne-memory/
 - [x] ChromaDB 向量存储层
 - [x] CLI 工具（ingest / search / info）
 - [x] 中英双语 README
+- [ ] 核心数据模型（Document / Entity / Relation）确认
+- [ ] ChromaDB 运行时验证
+- [ ] 各摄入器单元测试
+- [ ] 批量摄入与进度条支持
 
 ### 第二阶段 LLM 增强（规划中）
-- [ ] LLM 统一抽象接口（DeepSeek / Qwen / ChatGPT / Claude / Gemini / Grok）
-- [ ] 配置文件管理（`config.json`）
-- [ ] LLM 增强语义重排
+- [ ] LLM 统一抽象接口（DeepSeek / Claude / Qwen / ChatGPT / Gemini / Grok）
+- [ ] `config.json` 配置文件管理
+- [ ] LLM 增强语义重排（Reranker）
 - [ ] 智能动态分块（语义切分替代固定长度）
 
 ### 第三阶段 知识图谱（规划中）
@@ -174,19 +179,20 @@ ariadne-memory/
 - [ ] 跨源关联查询
 - [ ] 知识时间线视图
 
-### 第四阶段 MCP Server（规划中）
+### 第四阶段 媒体支持与学术工具（规划中）
+- [ ] EPUB / MOBI 电子书摄入（ebooklib）
+- [ ] 图片摄入（截图、照片等元数据提取）
+- [ ] 图片 / 扫描版 PDF OCR（pytesseract / RapidOCR）
+- [ ] 学术文献元数据（BibTeX / RIS）管理
+
+### 第五阶段 MCP Server（规划中）
 - [ ] FastMCP 实现
 - [ ] 核心工具：`memory_write` / `memory_search` / `graph_query` / `timeline_view`
-- [ ] 接入 Claude Code / WorkBuddy / Cursor 测试
+- [ ] 接入 Claude Code / WorkBuddy / Cursor 验证
 
-### 第五阶段 电子书与更多格式（规划中）
-- [ ] EPUB 摄入（ebooklib）
-- [ ] MOBI 摄入
-- [ ] 网页剪藏（HTML → 正文提取）
-- [ ] 学术文献元数据（BibTeX / RIS）
-
-### 第六阶段 发布与社区（持续）
+### 第六阶段 社区运营与迭代（持续）
 - [x] GitHub 正式发布
+- [ ] 版本化发布（v0.1.0-alpha）
 - [ ] HackerNews / Reddit 投递
 - [ ] 中文社区传播（掘金 / 知乎 / CSDN）
 
@@ -208,7 +214,7 @@ ariadne-memory/
 | 文档解析 | PyMuPDF, python-docx, python-pptx | PDF/Word/PPT 解析 |
 | 代码解析 | Python AST, 正则表达式 | 函数/类/注释提取 |
 | CLI 框架 | Click | 命令行界面 |
-| 图数据库 | NetworkX, SQLAlchemy | 知识图谱（第三阶段）|
+| 图数据库 | NetworkX, SQLAlchemy | 知识图谱（P3）|
 
 ---
 
