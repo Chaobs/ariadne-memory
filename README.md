@@ -176,11 +176,11 @@ ariadne-memory/
 - [x] LLM 增强语义重排（Reranker）
 - [x] 智能动态分块（SemanticChunker 替代固定长度）
 
-### 第三阶段 知识图谱（规划中）
-- [ ] 实体识别 + 关系抽取（LLM API 驱动）
-- [ ] NetworkX + SQLite 图数据库
-- [ ] 跨源关联查询
-- [ ] 知识时间线视图
+### 第三阶段 知识图谱 ✅ **已完成**
+- [x] 实体识别 + 关系抽取（LLM API 驱动）
+- [x] NetworkX + SQLite 图数据库
+- [x] 跨源关联查询
+- [x] 知识时间线视图
 
 ### 第四阶段 媒体支持与学术工具（规划中）
 - [ ] EPUB / MOBI 电子书摄入（ebooklib）
