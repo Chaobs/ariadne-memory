@@ -170,11 +170,11 @@ ariadne-memory/
 - [x] 批量摄入与进度条支持
 - [x] **Tkinter GUI 原型**（CLI/GUI 双入口）
 
-### 第二阶段 LLM 增强（规划中）
-- [ ] LLM 统一抽象接口（DeepSeek / Claude / Qwen / ChatGPT / Gemini / Grok）
-- [ ] `config.json` 配置文件管理
-- [ ] LLM 增强语义重排（Reranker）
-- [ ] 智能动态分块（语义切分替代固定长度）
+### 第二阶段 LLM 增强 ✅ **已完成**
+- [x] LLM 统一抽象接口（DeepSeek / Claude / Qwen / ChatGPT / Gemini / Grok）
+- [x] `config.json` 配置文件管理
+- [x] LLM 增强语义重排（Reranker）
+- [x] 智能动态分块（SemanticChunker 替代固定长度）
 
 ### 第三阶段 知识图谱（规划中）
 - [ ] 实体识别 + 关系抽取（LLM API 驱动）

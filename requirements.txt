@@ -16,6 +16,9 @@ SQLAlchemy>=2.0.0      # Database ORM
 # Code analysis
 astor>=0.8.1           # AST manipulation for code comments
 
+# LLM support
+requests>=2.31.0       # HTTP library (for LLM APIs)
+
 # Configuration
 PyYAML>=6.0
 

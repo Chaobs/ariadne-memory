@@ -1,0 +1,37 @@
+{
+  "_comment": "Ariadne Configuration File - Copy to config.json and fill in your values",
+  
+  "llm": {
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "api_key": "YOUR_API_KEY_HERE",
+    "base_url": null,
+    "temperature": 0.7,
+    "max_tokens": 2048,
+    "timeout": 60
+  },
+  
+  "chroma": {
+    "persist_directory": ".ariadne/chroma",
+    "collection_name": "ariadne_memory"
+  },
+  
+  "ingest": {
+    "chunk_size": 500,
+    "chunk_overlap": 50,
+    "batch_size": 100,
+    "use_semantic_chunking": false
+  },
+  
+  "rerank": {
+    "enabled": false,
+    "provider": "deepseek",
+    "initial_top_k": 20,
+    "rerank_top_k": 5
+  },
+  
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  }
+}
