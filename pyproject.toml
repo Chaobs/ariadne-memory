@@ -63,10 +63,10 @@ llm = [
 ariadne = "ariadne.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/chaobs/ariadne-memory"
-Documentation = "https://github.com/chaobs/ariadne-memory#readme"
-Repository = "https://github.com/chaobs/ariadne-memory"
-Issues = "https://github.com/chaobs/ariadne-memory/issues"
+Homepage = "https://github.com/Chaobs/ariadne-memory"
+Documentation = "https://github.com/Chaobs/ariadne-memory#readme"
+Repository = "https://github.com/Chaobs/ariadne-memory"
+Issues = "https://github.com/Chaobs/ariadne-memory/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ariadne"]

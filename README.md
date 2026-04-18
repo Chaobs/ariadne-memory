@@ -63,7 +63,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/chaobs/ariadne-memory.git
+git clone https://github.com/Chaobs/ariadne-memory.git
 cd ariadne-memory
 
 # 创建虚拟环境（推荐）
