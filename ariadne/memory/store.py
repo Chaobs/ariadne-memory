@@ -1,0 +1,171 @@
+"""
+ChromaDB-based vector store for Ariadne.
+
+This module implements the core memory storage layer.
+Design principle: keep the API simple and swappable — if you want to
+replace ChromaDB with Qdrant, Weaviate, or pgvector later, only this
+module needs to change.
+"""
+
+import os
+import hashlib
+from pathlib import Path
+from typing import List, Tuple, Optional
+
+import chromadb
+from chromadb.config import Settings as ChromaSettings
+
+from ariadne.ingest.base import Document, SourceType
+
+
+class VectorStore:
+    """
+    ChromaDB-backed vector memory store.
+
+    Stores Document objects as vector embeddings, enabling semantic
+    similarity search across all ingested content.
+
+    Design notes:
+    - Uses ChromaDB's built-in embedding function (all-MiniLM-L6-v2 via sentence-transformers)
+    - Persists data to a local directory (default: ./ariadne_data)
+    - Collection is auto-created on first add()
+    - Documents are de-duplicated by doc_id
+
+    Usage:
+        >>> store = VectorStore()
+        >>> store.add(my_documents)
+        >>> results = store.search("my query", top_k=5)
+    """
+
+    COLLECTION_NAME = "ariadne_memory"
+
+    def __init__(self, persist_dir: Optional[str] = None):
+        """
+        Initialize the vector store.
+
+        Args:
+            persist_dir: Directory to persist ChromaDB data.
+                         Defaults to ./ariadne_data in the working directory.
+        """
+        if persist_dir is None:
+            persist_dir = str(Path.cwd() / "ariadne_data")
+
+        self.persist_dir = persist_dir
+        Path(persist_dir).mkdir(parents=True, exist_ok=True)
+
+        self._client = chromadb.PersistentClient(
+            path=persist_dir,
+            settings=ChromaSettings(anonymized_telemetry=False),
+        )
+
+        self._collection = self._client.get_or_create_collection(
+            name=self.COLLECTION_NAME,
+            metadata={"description": "Ariadne cross-source memory store"},
+        )
+
+    def add(self, documents: List[Document]) -> None:
+        """
+        Add documents to the vector store.
+
+        Args:
+            documents: List of Document objects to add.
+
+        Note:
+            If a document with the same doc_id already exists, it will be
+            updated (upsert behavior).
+        """
+        if not documents:
+            return
+
+        ids = []
+        contents = []
+        metadatas = []
+        source_types = []
+
+        for doc in documents:
+            ids.append(doc.doc_id)
+            contents.append(doc.content)
+            metadatas.append({
+                "source_type": doc.source_type.value,
+                "source_path": doc.source_path,
+                "chunk_index": doc.chunk_index,
+                "total_chunks": doc.total_chunks,
+                **doc.metadata,
+            })
+            source_types.append(doc.source_type.value)
+
+        self._collection.upsert(
+            ids=ids,
+            documents=contents,
+            metadatas=metadatas,
+        )
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        source_types: Optional[List[str]] = None,
+    ) -> List[Tuple[Document, float]]:
+        """
+        Semantic search across all stored documents.
+
+        Args:
+            query: Natural language search query.
+            top_k: Number of results to return.
+            source_types: Optional filter — only search these source types
+                          (e.g., ["pdf", "markdown"]).
+
+        Returns:
+            List of (Document, score) tuples, sorted by relevance (best first).
+            Score is cosine similarity (0–1, higher = more relevant).
+        """
+        where_filter = None
+        if source_types:
+            where_filter = {"source_type": {"$in": source_types}}
+
+        results = self._collection.query(
+            query_texts=[query],
+            n_results=top_k,
+            where=where_filter,
+            include=["documents", "metadatas", "distances"],
+        )
+
+        documents = []
+        if results["documents"] and results["documents"][0]:
+            for i, content in enumerate(results["documents"][0]):
+                metadata = (results["metadatas"][0][i]) if results["metadatas"] else {}
+                distance = (results["distances"][0][i]) if results["distances"] else 0.0
+
+                # Convert distance to similarity score (ChromaDB uses Euclidean distance)
+                score = 1.0 / (1.0 + distance)
+
+                source_type_str = metadata.get("source_type", "unknown")
+                try:
+                    st = SourceType(source_type_str)
+                except ValueError:
+                    st = SourceType.UNKNOWN
+
+                doc = Document(
+                    content=content,
+                    source_type=st,
+                    source_path=metadata.get("source_path", ""),
+                    chunk_index=metadata.get("chunk_index", 0),
+                    total_chunks=metadata.get("total_chunks", 1),
+                    metadata={k: v for k, v in metadata.items()
+                              if k not in ("source_type", "source_path", "chunk_index", "total_chunks")},
+                )
+                documents.append((doc, score))
+
+        return documents
+
+    def count(self) -> int:
+        """Return the total number of documents in the store."""
+        return self._collection.count()
+
+    def clear(self) -> None:
+        """Clear all documents from the store."""
+        self._client.delete_collection(name=self.COLLECTION_NAME)
+        self._collection = self._client.get_or_create_collection(
+            name=self.COLLECTION_NAME,
+            metadata={"description": "Ariadne cross-source memory store"},
+        )

@@ -1,0 +1,84 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ariadne-memory"
+version = "0.1.0"
+description = "Cross-source AI memory and knowledge weaving system"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [
+    { name = "Chaobs" }
+]
+keywords = [
+    "ai",
+    "memory",
+    "knowledge-graph",
+    "vector-search",
+    "knowledge-management",
+    "rag",
+    "mcp"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: General",
+]
+dependencies = [
+    "chromadb>=0.4.0",
+    "click>=8.0.0",
+    "python-docx>=1.0.0",
+    "python-pptx>=0.6.21",
+    "PyMuPDF>=1.23.0",
+    "networkx>=3.0",
+    "SQLAlchemy>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+llm = [
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
+    "dashscope>=1.14.0",
+    "groq>=0.4.0",
+]
+
+[project.scripts]
+ariadne = "ariadne.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/chaobs/ariadne-memory"
+Documentation = "https://github.com/chaobs/ariadne-memory#readme"
+Repository = "https://github.com/chaobs/ariadne-memory"
+Issues = "https://github.com/chaobs/ariadne-memory/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ariadne"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_ignores = true
