@@ -21,6 +21,9 @@ __all__ = [
     "QwenLLM",
     "GeminiLLM",
     "GrokLLM",
+    "KimiLLM",
+    "MiniMaxLLM",
+    "GLMLLM",
     "LLMFactory",
     "ConfigManager",
     "LLMReranker",
@@ -41,4 +44,7 @@ from ariadne.llm.providers import (
     QwenLLM,
     GeminiLLM,
     GrokLLM,
+    KimiLLM,
+    MiniMaxLLM,
+    GLMLLM,
 )

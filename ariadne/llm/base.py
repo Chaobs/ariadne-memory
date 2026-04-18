@@ -19,6 +19,9 @@ class LLMProvider(Enum):
     QWEN = "qwen"
     GEMINI = "gemini"
     GROK = "grok"
+    KIMI = "kimi"       # Moonshot AI
+    MINIMAX = "minimax" # MiniMax AI
+    GLM = "glm"         # Zhipu AI (ChatGLM)
 
 
 @dataclass

@@ -5,6 +5,15 @@ Ariadne weaves together knowledge from diverse sources — documents, conversati
 code, and more — into a unified memory system powered by vector search and
 knowledge graphs.
 
+Features:
+- Multi-format document ingestion (Markdown, PDF, Word, PPT, Excel, etc.)
+- Semantic search with ChromaDB vector storage
+- Multi-memory system support with CRUD operations
+- Knowledge graph extraction and visualization
+- LLM-powered features (summarization, entity extraction, reranking)
+- Multi-language support (7 UN languages)
+- CLI and GUI interfaces
+
 Example:
     >>> from ariadne.ingest import MarkdownIngestor
     >>> from ariadne.memory import VectorStore
@@ -14,16 +23,32 @@ Example:
     >>> results = store.search("What did I write about AI?")
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "Chaobs"
 
 from ariadne.memory import VectorStore
 from ariadne.ingest.base import BaseIngestor
 
+# Core exports
+from ariadne.config import AriadneConfig, get_config
+from ariadne.advanced import Summarizer, GraphVisualizer, Exporter
+
 __all__ = [
+    # Version info
     "__version__",
+    
+    # Core modules
     "VectorStore",
     "BaseIngestor",
+    
+    # Configuration
+    "AriadneConfig",
+    "get_config",
+    
+    # Advanced features
+    "Summarizer",
+    "GraphVisualizer",
+    "Exporter",
 ]
 
 # GUI is optional (requires tkinter)

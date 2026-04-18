@@ -336,3 +336,154 @@ class GrokLLM(BaseLLM):
             raw_response=data,
             model=data.get("model", self.config.model),
         )
+
+
+class KimiLLM(BaseLLM):
+    """Moonshot AI Kimi LLM provider.
+    
+    API documentation: https://platform.moonshot.cn/docs/api/chat
+    """
+    
+    DEFAULT_BASE_URL = "https://api.moonshot.cn/v1"
+    DEFAULT_MODEL = "moonshot-v1-8k"
+    
+    @property
+    def provider(self) -> LLMProvider:
+        return LLMProvider.KIMI
+    
+    def _call_api(self, messages: List[Dict[str, str]], **kwargs) -> LLMResponse:
+        """Call Moonshot (Kimi) API."""
+        base_url = self.config.base_url or self.DEFAULT_BASE_URL
+        url = f"{base_url}/chat/completions"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.config.api_key}",
+        }
+        
+        payload = {
+            "model": self.config.model or self.DEFAULT_MODEL,
+            "messages": messages,
+            "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
+            "temperature": kwargs.get("temperature", self.config.temperature),
+        }
+        
+        response = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=self.config.timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        content = data["choices"][0]["message"]["content"]
+        usage = data.get("usage", {})
+        
+        return LLMResponse(
+            content=content,
+            raw_response=data,
+            model=data.get("model", self.config.model),
+            usage=usage,
+        )
+
+
+class MiniMaxLLM(BaseLLM):
+    """MiniMax AI LLM provider.
+    
+    API documentation: https://www.minimaxi.com/document/Guides/Product%20Documentation/Chat
+    """
+    
+    DEFAULT_BASE_URL = "https://api.minimax.chat/v1"
+    DEFAULT_MODEL = "abab5.5-chat"
+    
+    @property
+    def provider(self) -> LLMProvider:
+        return LLMProvider.MINIMAX
+    
+    def _call_api(self, messages: List[Dict[str, str]], **kwargs) -> LLMResponse:
+        """Call MiniMax API."""
+        base_url = self.config.base_url or self.DEFAULT_BASE_URL
+        url = f"{base_url}/text/chatcompletion_v2"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.config.api_key}",
+        }
+        
+        payload = {
+            "model": self.config.model or self.DEFAULT_MODEL,
+            "messages": messages,
+            "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
+            "temperature": kwargs.get("temperature", self.config.temperature),
+        }
+        
+        response = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=self.config.timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        # MiniMax response format
+        content = data["choices"][0]["messages"][0]["text"]
+        usage = data.get("usage", {})
+        
+        return LLMResponse(
+            content=content,
+            raw_response=data,
+            model=data.get("model", self.config.model),
+            usage=usage,
+        )
+
+
+class GLMLLM(BaseLLM):
+    """Zhipu AI (ChatGLM) LLM provider.
+    
+    API documentation: https://open.bigmodel.cn/dev/api#chatglm_turbo
+    """
+    
+    DEFAULT_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
+    DEFAULT_MODEL = "glm-4"
+    
+    @property
+    def provider(self) -> LLMProvider:
+        return LLMProvider.GLM
+    
+    def _call_api(self, messages: List[Dict[str, str]], **kwargs) -> LLMResponse:
+        """Call Zhipu AI (GLM) API."""
+        base_url = self.config.base_url or self.DEFAULT_BASE_URL
+        url = f"{base_url}/chat/completions"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.config.api_key}",
+        }
+        
+        payload = {
+            "model": self.config.model or self.DEFAULT_MODEL,
+            "messages": messages,
+            "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
+            "temperature": kwargs.get("temperature", self.config.temperature),
+        }
+        
+        response = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=self.config.timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        content = data["choices"][0]["message"]["content"]
+        usage = data.get("usage", {})
+        
+        return LLMResponse(
+            content=content,
+            raw_response=data,
+            model=data.get("model", self.config.model),
+            usage=usage,
+        )

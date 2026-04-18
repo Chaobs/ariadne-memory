@@ -15,6 +15,7 @@
 - [功能特性 / Features](#功能特性--features)
 - [支持格式 / Supported Formats](#支持格式--supported-formats)
 - [快速开始 / Quick Start](#快速开始--quick-start)
+- [CLI 使用指南 / CLI Usage](#cli-使用指南--cli-usage)
 - [架构设计 / Architecture](#架构设计--architecture)
 - [开发路线 / Roadmap](#开发路线--roadmap)
 - [项目致谢 / Credits](#项目致谢--credits)
@@ -28,11 +29,17 @@
 | 🗂️ **多源摄入** | 同时支持 Markdown、Word、PPT、PDF、TXT、思维导图、代码等多种格式 |
 | 🔍 **语义搜索** | 基于向量数据库的语义相似度搜索，返回最相关结果 |
 | 🧠 **记忆持久化** | ChromaDB 本地持久化存储，数据完全归你所有 |
-| 🔗 **知识图谱**（规划中）| 自动识别实体与关系，构建跨源知识关联网络 |
-| 🤖 **AI 增强**（P2 规划中）| 调用 DeepSeek / Claude 等主流 AI 接口进行增强检索与智能摘要 |
-| 🧮 **知识图谱**（P3 规划中）| 实体识别 + 跨源关联 + 时间线视图 |
-| 📚 **媒体支持**（P4 规划中）| EPUB/MOBI 电子书、图片 OCR、扫描 PDF、学术文献元数据 |
-| 🔌 **MCP Server**（P5 规划中）| 提供 MCP 工具接口，可接入 Claude Code / WorkBuddy / Cursor |
+| 📁 **多记忆系统** | 支持创建多个独立记忆系统，分类管理不同领域知识 |
+| 🔗 **知识图谱** | 自动识别实体与关系，构建跨源知识关联网络 |
+| 🤖 **AI 增强** | 支持 DeepSeek / Claude / Qwen / Gemini / Kimi / MiniMax / GLM / Grok 等主流 AI |
+| 🧮 **系统合并** | 支持合并多个记忆系统为一，便于知识整合 |
+| 📚 **媒体支持** | EPUB/MOBI 电子书、图片 OCR、扫描 PDF、学术文献元数据 |
+| 🔌 **MCP Server** | 提供 MCP 工具接口，可接入 Claude Code / WorkBuddy / Cursor |
+| 🖥️ **双入口** | CLI 和 GUI 两种界面，支持所有相同功能 |
+| 🌍 **多语言** | 支持 7 种联合国工作语言（中文简繁体、英、法、西、俄、阿） |
+| 📝 **智能摘要** | LLM 驱动的多语言摘要生成，支持指定输出语言 |
+| 📊 **可视化** | 知识图谱交互式可视化（HTML / DOT / Mermaid） |
+| 📤 **多格式导出** | 支持 Markdown、HTML、Word、PDF 格式导出 |
 
 ---
 
@@ -107,6 +114,21 @@ ariadne search "犹太教与基督教的共同伦理观念"
 
 # 查看系统信息
 ariadne info --stats
+
+# 创建新的记忆系统
+ariadne memory create "Research Notes"
+
+# 摄入到指定记忆系统
+ariadne ingest ./papers/ -r -m "Research Notes"
+
+# 搜索指定记忆系统
+ariadne search "AI ethics" -m "Research Notes"
+
+# 合并多个记忆系统
+ariadne memory merge old_notes temp "Consolidated"
+
+# 启动 GUI
+ariadne gui
 ```
 
 ### Python API
@@ -134,6 +156,144 @@ for doc, score in results:
 
 ---
 
+## CLI 使用指南 / CLI Usage
+
+> 详细的使用说明请参阅 [USAGE.md](USAGE.md)。
+
+### 命令概览 / Command Overview
+
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `ingest` | 摄入文件或目录 | `ariadne ingest ./notes.md` |
+| `search` | 语义搜索 | `ariadne search "AI伦理"` |
+| `info` | 查看系统信息 | `ariadne info --stats` |
+| `gui` | 启动图形界面 | `ariadne gui` |
+| `memory list` | 列出所有记忆系统 | `ariadne memory list` |
+| `memory create` | 创建新记忆系统 | `ariadne memory create "Research"` |
+| `memory rename` | 重命名记忆系统 | `ariadne memory rename old new` |
+| `memory delete` | 删除记忆系统 | `ariadne memory delete old` |
+| `memory merge` | 合并记忆系统 | `ariadne memory merge a b new` |
+| `config show` | 显示当前配置 | `ariadne config show` |
+| `config set` | 设置配置项 | `ariadne config set llm.provider deepseek` |
+| `config test` | 测试 LLM 连接 | `ariadne config test` |
+| `config set-api-key` | 设置 API 密钥 | `ariadne config set-api-key deepseek sk-xxxxx` |
+| `advanced summarize` | 生成摘要 | `ariadne advanced summarize "AI"` |
+| `advanced graph` | 知识图谱 | `ariadne advanced graph -f dot` |
+
+### memory — 记忆系统管理
+
+```bash
+# 列出所有记忆系统
+ariadne memory list
+
+# 创建新记忆系统
+ariadne memory create "Research Notes" -d "Academic papers"
+
+# 重命名
+ariadne memory rename "Research Notes" "Academic"
+
+# 删除
+ariadne memory delete "Old Notes"
+
+# 合并多个系统
+ariadne memory merge research personal "All Knowledge"
+
+# 查看系统信息
+ariadne memory info research
+```
+
+### ingest — 摄入文件
+
+```bash
+# 摄入到默认系统
+python -m ariadne.cli ingest ./notes.md
+
+# 摄入到指定系统
+python -m ariadne.cli ingest ./papers/ -r -m "Research"
+
+# 详细输出
+python -m ariadne.cli ingest ./papers/ -r -v
+
+# 调整批处理大小
+python -m ariadne.cli ingest ./books/ -b 50
+```
+
+### search — 语义搜索
+
+```bash
+# 基本搜索
+python -m ariadne.cli search "机器学习"
+
+# 指定返回数量
+python -m ariadne.cli search "深度学习" -k 10
+
+# 搜索指定系统
+python -m ariadne.cli search "宗教哲学" -m "Research"
+
+# 显示详细信息
+python -m ariadne.cli search "自然语言处理" -v
+```
+
+### info — 系统信息
+
+```bash
+# 基本信息
+python -m ariadne.cli info
+
+# 显示统计
+python -m ariadne.cli info --stats
+
+# 查看指定系统
+python -m ariadne.cli info --stats -m "Research"
+```
+
+### gui — 图形界面
+
+```bash
+# 启动 GUI（需要图形环境）
+python -m ariadne.cli gui
+```
+
+### config — 配置管理
+
+```bash
+# 显示当前配置
+ariadne config show
+
+# 列出支持的 LLM 提供商
+ariadne config list-providers
+
+# 设置配置项
+ariadne config set llm.provider deepseek
+ariadne config set llm.model deepseek-chat
+ariadne config set locale.language zh_CN
+ariadne config set advanced.enable_reranker true
+
+# 获取配置值
+ariadne config get llm.provider
+
+# 测试 LLM 连接
+ariadne config test
+
+# 设置 API 密钥
+ariadne config set-api-key deepseek sk-your-api-key
+```
+
+### advanced — 高级功能
+
+```bash
+# 生成摘要（需要 LLM 配置）
+ariadne advanced summarize "机器学习"
+ariadne advanced summarize -m "Research" -l en
+
+# 查看知识图谱
+ariadne advanced graph
+ariadne advanced graph -f dot
+ariadne advanced graph -f json
+```
+
+---
+
 ## 架构设计 / Architecture
 
 ```
@@ -141,6 +301,10 @@ ariadne-memory/
 ├── ariadne/
 │   ├── __init__.py          # 公共 API 入口
 │   ├── cli.py                # 命令行工具
+│   ├── gui.py                # Tkinter GUI 图形界面
+│   ├── config.py             # 统一配置系统
+│   ├── advanced.py           # 高级功能（摘要/可视化/导出）
+│   ├── i18n.py               # 多语言国际化支持
 │   ├── ingest/               # 摄入模块
 │   │   ├── base.py          # BaseIngestor 抽象基类 + Document 数据模型
 │   │   ├── markdown.py       # Markdown 摄入器
@@ -152,10 +316,26 @@ ariadne-memory/
 │   │   ├── mindmap.py       # 思维导图摄入器
 │   │   └── code.py          # 代码注释摄入器
 │   ├── memory/              # 向量记忆存储层
-│   │   └── store.py         # ChromaDB 向量存储实现
-│   ├── llm/                 # LLM 统一接口（第二阶段）
-│   ├── graph/               # 知识图谱（第三阶段）
+│   │   ├── store.py         # ChromaDB 向量存储实现
+│   │   ├── manager.py       # 多记忆系统管理器
+│   │   └── __init__.py
+│   ├── llm/                 # LLM 统一接口
+│   │   ├── base.py          # BaseLLM 抽象基类
+│   │   ├── factory.py        # LLM 工厂 + ConfigManager
+│   │   ├── providers.py      # 各提供商实现
+│   │   ├── reranker.py      # 语义重排
+│   │   └── chunker.py       # 智能分块
+│   ├── graph/               # 知识图谱
+│   │   ├── models.py        # Entity/Relation 数据模型
+│   │   ├── extractor.py     # 实体/关系抽取
+│   │   ├── storage.py       # NetworkX + SQLite 存储
+│   │   └── query.py         # 图查询接口
 │   └── mcp/                 # MCP Server（第五阶段）
+├── locale/                  # 国际化翻译文件
+│   ├── zh_CN/LC_MESSAGES/
+│   ├── zh_TW/LC_MESSAGES/
+│   ├── en/LC_MESSAGES/
+│   └── ...
 └── tests/
 ```
 

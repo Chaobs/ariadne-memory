@@ -9,5 +9,6 @@ abstracting away collection management, embedding, and querying details.
 """
 
 from ariadne.memory.store import VectorStore
+from ariadne.memory.manager import MemoryManager, MemorySystem, get_manager
 
-__all__ = ["VectorStore"]
+__all__ = ["VectorStore", "MemoryManager", "MemorySystem", "get_manager"]

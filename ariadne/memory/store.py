@@ -30,6 +30,7 @@ class VectorStore:
     - Persists data to a local directory (default: ./ariadne_data)
     - Collection is auto-created on first add()
     - Documents are de-duplicated by doc_id
+    - Supports multiple collections (for multi-memory systems)
 
     Usage:
         >>> store = VectorStore()
@@ -37,20 +38,23 @@ class VectorStore:
         >>> results = store.search("my query", top_k=5)
     """
 
-    COLLECTION_NAME = "ariadne_memory"
+    DEFAULT_COLLECTION = "ariadne_memory"
 
-    def __init__(self, persist_dir: Optional[str] = None):
+    def __init__(self, persist_dir: Optional[str] = None, collection_name: Optional[str] = None):
         """
         Initialize the vector store.
 
         Args:
             persist_dir: Directory to persist ChromaDB data.
                          Defaults to ./ariadne_data in the working directory.
+            collection_name: Name of the collection. Defaults to DEFAULT_COLLECTION.
+                            Use different collection names for different memory systems.
         """
         if persist_dir is None:
             persist_dir = str(Path.cwd() / "ariadne_data")
 
         self.persist_dir = persist_dir
+        self.collection_name = collection_name or self.DEFAULT_COLLECTION
         Path(persist_dir).mkdir(parents=True, exist_ok=True)
 
         self._client = chromadb.PersistentClient(
@@ -59,8 +63,8 @@ class VectorStore:
         )
 
         self._collection = self._client.get_or_create_collection(
-            name=self.COLLECTION_NAME,
-            metadata={"description": "Ariadne cross-source memory store"},
+            name=self.collection_name,
+            metadata={"description": f"Ariadne memory: {self.collection_name}"},
         )
 
     def add(self, documents: List[Document]) -> None:
@@ -164,8 +168,8 @@ class VectorStore:
 
     def clear(self) -> None:
         """Clear all documents from the store."""
-        self._client.delete_collection(name=self.COLLECTION_NAME)
+        self._client.delete_collection(name=self.collection_name)
         self._collection = self._client.get_or_create_collection(
-            name=self.COLLECTION_NAME,
-            metadata={"description": "Ariadne cross-source memory store"},
+            name=self.collection_name,
+            metadata={"description": f"Ariadne memory: {self.collection_name}"},
         )

@@ -10,6 +10,9 @@ from ariadne.llm.providers import (
     QwenLLM,
     GeminiLLM,
     GrokLLM,
+    KimiLLM,
+    MiniMaxLLM,
+    GLMLLM,
 )
 from typing import Optional, Dict
 import json
@@ -41,6 +44,9 @@ class LLMFactory:
         LLMProvider.QWEN: QwenLLM,
         LLMProvider.GEMINI: GeminiLLM,
         LLMProvider.GROK: GrokLLM,
+        LLMProvider.KIMI: KimiLLM,
+        LLMProvider.MINIMAX: MiniMaxLLM,
+        LLMProvider.GLM: GLMLLM,
     }
     
     @classmethod
