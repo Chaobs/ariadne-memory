@@ -78,4 +78,97 @@ __all__ = [
     "MBOXIngestor",
     "VideoIngestor",
     "AudioIngestor",
+    # Factory function
+    "get_ingestor",
 ]
+
+
+def get_ingestor(source: str) -> BaseIngestor:
+    """
+    Factory function to get the appropriate ingestor for a source.
+
+    Args:
+        source: File path, URL, or other source identifier
+
+    Returns:
+        Appropriate ingestor instance
+
+    Raises:
+        ValueError: If no ingestor found for the source type
+    """
+    from pathlib import Path
+
+    source_lower = source.lower()
+
+    # Check for URL first
+    if source_lower.startswith(("http://", "https://", "ftp://")):
+        return WebIngestor()
+
+    # Get file extension
+    path = Path(source)
+    ext = path.suffix.lower() if path.suffix else ""
+
+    # Extension-based mapping
+    EXTENSION_MAP = {
+        ".md": MarkdownIngestor,
+        ".markdown": MarkdownIngestor,
+        ".docx": WordIngestor,
+        ".pptx": PPTIngestor,
+        ".pdf": PDFIngestor,
+        ".txt": TxtIngestor,
+        ".json": ConversationIngestor,
+        ".mm": MindMapIngestor,
+        ".xmind": MindMapIngestor,
+        ".py": CodeIngestor,
+        ".java": CodeIngestor,
+        ".cpp": CodeIngestor,
+        ".c": CodeIngestor,
+        ".h": CodeIngestor,
+        ".hpp": CodeIngestor,
+        ".js": CodeIngestor,
+        ".ts": CodeIngestor,
+        ".jsx": CodeIngestor,
+        ".tsx": CodeIngestor,
+        ".cs": CodeIngestor,
+        ".go": CodeIngestor,
+        ".rs": CodeIngestor,
+        ".rb": CodeIngestor,
+        ".php": CodeIngestor,
+        ".swift": CodeIngestor,
+        ".kt": CodeIngestor,
+        ".scala": CodeIngestor,
+        ".xlsx": ExcelIngestor,
+        ".xls": ExcelIngestor,
+        ".csv": CsvIngestor,
+        ".epub": EPUBIngestor,
+        ".bib": BibTeXIngestor,
+        ".ris": RISIngestor,
+        ".eml": EmailIngestor,
+        ".mbox": MBOXIngestor,
+        ".jpg": ImageIngestor,
+        ".jpeg": ImageIngestor,
+        ".png": ImageIngestor,
+        ".gif": ImageIngestor,
+        ".bmp": ImageIngestor,
+        ".tiff": ImageIngestor,
+        ".webp": ImageIngestor,
+        ".mp4": VideoIngestor,
+        ".avi": VideoIngestor,
+        ".mkv": VideoIngestor,
+        ".mov": VideoIngestor,
+        ".mp3": AudioIngestor,
+        ".wav": AudioIngestor,
+        ".m4a": AudioIngestor,
+        ".flac": AudioIngestor,
+        ".ogg": AudioIngestor,
+    }
+
+    if ext in EXTENSION_MAP:
+        return EXTENSION_MAP[ext]()
+
+    # Check if it's a directory (batch ingest)
+    if path.is_dir():
+        # Return base ingestor for directory traversal
+        return TxtIngestor()
+
+    raise ValueError(f"No ingestor found for source: {source} (extension: {ext})")
