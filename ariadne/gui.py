@@ -31,11 +31,14 @@ from ariadne.config import (
     AriadneConfig,
     get_config,
     reload_config,
+)
+from ariadne.i18n import (
+    init_locale,
+    get_locale,
     available_locales,
     get_locale_display,
     set_locale,
 )
-from ariadne.i18n import init_locale, get_locale
 from ariadne.advanced import Summarizer, GraphVisualizer, Exporter
 from ariadne.graph.storage import GraphStorage
 
@@ -1088,9 +1091,26 @@ class AriadneGUI:
 
 def main():
     """Launch the GUI."""
-    root = tk.Tk()
-    app = AriadneGUI(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = AriadneGUI(root)
+        root.mainloop()
+    except Exception as e:
+        import traceback
+        print(f"GUI Error: {e}")
+        print("\nDetailed error:")
+        traceback.print_exc()
+        
+        # Try to show error in a message box
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            from tkinter import messagebox
+            messagebox.showerror("Ariadne GUI Error", f"Failed to start GUI:\n\n{e}\n\nPlease check your configuration and try again.")
+        except:
+            pass
+        
+        input("\nPress Enter to exit...")
 
 
 if __name__ == "__main__":
