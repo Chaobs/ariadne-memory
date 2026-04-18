@@ -166,6 +166,7 @@ ariadne-memory/
 - [ ] ChromaDB 运行时验证
 - [ ] 各摄入器单元测试
 - [ ] 批量摄入与进度条支持
+- [ ] **Tkinter GUI 原型**（CLI/GUI 双入口）
 
 ### 第二阶段 LLM 增强（规划中）
 - [ ] LLM 统一抽象接口（DeepSeek / Claude / Qwen / ChatGPT / Gemini / Grok）
@@ -193,6 +194,7 @@ ariadne-memory/
 ### 第六阶段 社区运营与迭代（持续）
 - [x] GitHub 正式发布
 - [ ] 版本化发布（v0.1.0-alpha）
+- [ ] **PyQt6 GUI 重写**（替代 Tkinter 原型）
 - [ ] HackerNews / Reddit 投递
 - [ ] 中文社区传播（掘金 / 知乎 / CSDN）
 
