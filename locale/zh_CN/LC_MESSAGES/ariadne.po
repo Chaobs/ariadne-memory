@@ -1,0 +1,81 @@
+# Ariadne - 简体中文 (Simplified Chinese) Message Catalog
+# Copyright (C) 2026 Chaobs
+# This file is distributed under the MIT License.
+
+msgid ""
+msgstr ""
+"Project-Id-Version: Ariadne 0.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/Chaobs/ariadne-memory/issues\n"
+"POT-Creation-Date: 2026-04-18 13:45+0000\n"
+"PO-Revision-Date: 2026-04-18 13:45+0000\n"
+"Last-Translator: Chaobs\n"
+"Language: zh_CN\n"
+"Language-Team: 简体中文 (Simplified Chinese)\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Ingest files into memory"
+msgstr "将文件摄入记忆"
+
+msgid "Search memory"
+msgstr "搜索记忆"
+
+msgid "Show system info"
+msgstr "显示系统信息"
+
+msgid "Ingesting: {path}"
+msgstr "正在摄入: {path}"
+
+msgid "Search query:"
+msgstr "搜索查询:"
+
+msgid "No results found."
+msgstr "未找到结果。"
+
+msgid "Found {count} result(s):"
+msgstr "找到 {count} 个结果:"
+
+msgid "Source: {source}"
+msgstr "来源: {source}"
+
+msgid "Chunks: {chunks}"
+msgstr "分块数: {chunks}"
+
+msgid "Settings"
+msgstr "设置"
+
+msgid "Language"
+msgstr "语言"
+
+msgid "Select language:"
+msgstr "选择语言:"
+
+msgid "Memory Info"
+msgstr "记忆信息"
+
+msgid "Total documents: {count}"
+msgstr "文档总数: {count}"
+
+msgid "Total chunks: {count}"
+msgstr "分块总数: {count}"
+
+msgid "Vector store: {status}"
+msgstr "向量存储: {status}"
+
+msgid "Error: {message}"
+msgstr "错误: {message}"
+
+msgid "Ingestion complete."
+msgstr "摄入完成。"
+
+msgid "Export memory"
+msgstr "导出记忆"
+
+msgid "Import memory"
+msgstr "导入记忆"
+
+msgid "Clear memory"
+msgstr "清空记忆"
+

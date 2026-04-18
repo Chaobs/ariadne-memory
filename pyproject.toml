@@ -41,6 +41,8 @@ dependencies = [
     "python-docx>=1.0.0",
     "python-pptx>=0.6.21",
     "PyMuPDF>=1.23.0",
+    "openpyxl>=3.1.0",
+    "xlrd>=2.0.1",
     "networkx>=3.0",
     "SQLAlchemy>=2.0.0",
 ]

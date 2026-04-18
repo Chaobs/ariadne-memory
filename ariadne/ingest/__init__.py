@@ -13,6 +13,8 @@ Supported formats:
     .json      — Chat conversation exports (ConversationIngestor)
     .mm/.xmind — Mind maps (MindMapIngestor)
     .py/.java/.cpp/.js — Code files with comments (CodeIngestor)
+    .xlsx/.xls — Excel spreadsheets (ExcelIngestor)
+    .csv       — CSV files (CsvIngestor)
 """
 
 from ariadne.ingest.base import BaseIngestor, Document
@@ -24,6 +26,8 @@ from ariadne.ingest.txt import TxtIngestor
 from ariadne.ingest.conversation import ConversationIngestor
 from ariadne.ingest.mindmap import MindMapIngestor
 from ariadne.ingest.code import CodeIngestor
+from ariadne.ingest.excel import ExcelIngestor
+from ariadne.ingest.csv import CsvIngestor
 
 __all__ = [
     "BaseIngestor",
@@ -36,4 +40,6 @@ __all__ = [
     "ConversationIngestor",
     "MindMapIngestor",
     "CodeIngestor",
+    "ExcelIngestor",
+    "CsvIngestor",
 ]

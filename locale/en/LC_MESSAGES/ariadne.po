@@ -1,0 +1,81 @@
+# Ariadne - English Message Catalog
+# Copyright (C) 2026 Chaobs
+# This file is distributed under the MIT License.
+
+msgid ""
+msgstr ""
+"Project-Id-Version: Ariadne 0.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/Chaobs/ariadne-memory/issues\n"
+"POT-Creation-Date: 2026-04-18 13:45+0000\n"
+"PO-Revision-Date: 2026-04-18 13:45+0000\n"
+"Last-Translator: Chaobs\n"
+"Language: en\n"
+"Language-Team: English\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Ingest files into memory"
+msgstr "Ingest files into memory"
+
+msgid "Search memory"
+msgstr "Search memory"
+
+msgid "Show system info"
+msgstr "Show system info"
+
+msgid "Ingesting: {path}"
+msgstr "Ingesting: {path}"
+
+msgid "Search query:"
+msgstr "Search query:"
+
+msgid "No results found."
+msgstr "No results found."
+
+msgid "Found {count} result(s):"
+msgstr "Found {count} result(s):"
+
+msgid "Source: {source}"
+msgstr "Source: {source}"
+
+msgid "Chunks: {chunks}"
+msgstr "Chunks: {chunks}"
+
+msgid "Settings"
+msgstr "Settings"
+
+msgid "Language"
+msgstr "Language"
+
+msgid "Select language:"
+msgstr "Select language:"
+
+msgid "Memory Info"
+msgstr "Memory Info"
+
+msgid "Total documents: {count}"
+msgstr "Total documents: {count}"
+
+msgid "Total chunks: {count}"
+msgstr "Total chunks: {count}"
+
+msgid "Vector store: {status}"
+msgstr "Vector store: {status}"
+
+msgid "Error: {message}"
+msgstr "Error: {message}"
+
+msgid "Ingestion complete."
+msgstr "Ingestion complete."
+
+msgid "Export memory"
+msgstr "Export memory"
+
+msgid "Import memory"
+msgstr "Import memory"
+
+msgid "Clear memory"
+msgstr "Clear memory"
+

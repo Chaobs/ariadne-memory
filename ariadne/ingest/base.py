@@ -10,6 +10,7 @@ allowing the memory system to treat all document formats uniformly.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 from pathlib import Path
@@ -25,6 +26,8 @@ class SourceType(Enum):
     CONVERSATION = "conversation"
     MINDMAP = "mindmap"
     CODE = "code"
+    EXCEL = "excel"
+    CSV = "csv"
     UNKNOWN = "unknown"
 
 
@@ -43,6 +46,8 @@ class Document:
         chunk_index: Position of this chunk within the source file.
         total_chunks: Total number of chunks in this source file.
         metadata: Arbitrary key-value metadata (title, author, date, tags, etc.)
+        ingested_at: ISO 8601 timestamp when this chunk was ingested.
+                     Used for timeline view (P3) and cache invalidation.
     """
     content: str
     source_type: SourceType = SourceType.UNKNOWN
@@ -50,17 +55,26 @@ class Document:
     chunk_index: int = 0
     total_chunks: int = 1
     metadata: dict = field(default_factory=dict)
+    ingested_at: Optional[str] = None
 
     def __post_init__(self):
-        # Enforce non-empty content
         if not self.content or not self.content.strip():
             raise ValueError("Document content cannot be empty")
+        if self.ingested_at is None:
+            self.ingested_at = datetime.now(timezone.utc).isoformat()
 
     @property
     def doc_id(self) -> str:
-        """Generate a stable unique ID for this document."""
+        """
+        Stable unique ID based on source path + chunk index.
+
+        Uses location-based (not content-based) hashing so that:
+        - Editing the source file doesn't orphan previous chunks
+        - Upsert correctly replaces the same logical chunk
+        - Historical versions remain traceable for timeline view (P3)
+        """
         import hashlib
-        raw = f"{self.source_path}:{self.chunk_index}:{self.content[:80]}"
+        raw = f"{self.source_path}:{self.chunk_index}"
         return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
     def to_dict(self) -> dict:
@@ -72,6 +86,7 @@ class Document:
             "chunk_index": self.chunk_index,
             "total_chunks": self.total_chunks,
             "metadata": self.metadata,
+            "ingested_at": self.ingested_at,
         }
 
 
@@ -136,6 +151,9 @@ class BaseIngestor(ABC):
         blocks = self._extract(path)
         total = len(blocks)
 
+        from datetime import datetime, timezone
+        now_iso = datetime.now(timezone.utc).isoformat()
+
         return [
             Document(
                 content=block.strip(),
@@ -143,6 +161,7 @@ class BaseIngestor(ABC):
                 source_path=str(path.absolute()),
                 chunk_index=i,
                 total_chunks=total,
+                ingested_at=now_iso,
                 metadata={
                     "file_name": path.name,
                     "file_ext": path.suffix,

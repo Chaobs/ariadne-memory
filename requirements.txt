@@ -6,6 +6,8 @@ click>=8.0.0
 python-docx>=1.0.0      # .docx Word documents
 python-pptx>=0.6.21    # .pptx PowerPoint slides
 PyMuPDF>=1.23.0        # .pdf PDF files (also known as fitz)
+openpyxl>=3.1.0        # .xlsx Excel files
+xlrd>=2.0.1            # .xls legacy Excel files
 
 # Knowledge graph
 networkx>=3.0          # Graph data structure

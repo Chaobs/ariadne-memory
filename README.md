@@ -48,6 +48,8 @@
 | 对话导出 | `.json` | `ConversationIngestor` | 支持 ChatGPT/Claude/DeepSeek JSON 导出 |
 | 思维导图 | `.mm` / `.xmind` | `MindMapIngestor` | 保留树形结构作为上下文 |
 | 代码 | `.py/.java/.cpp/.js` | `CodeIngestor` | AST/正则提取函数、类、文档字符串 |
+| Excel | `.xlsx/.xls` | `ExcelIngestor` | 按工作表/行列提取，含单元格注释 |
+| Excel（CSV） | `.csv` | `CsvIngestor` | 保留表头作为上下文，按行切分 |
 
 > 📖 **第四阶段规划**: EPUB / MOBI 电子书、图片 OCR、扫描 PDF 识别、学术文献元数据（BibTeX / RIS）
 
@@ -158,7 +160,7 @@ ariadne-memory/
 
 ### 第一阶段 MVP ✅ **进行中**
 - [x] 项目骨架与目录结构
-- [x] 8 种文档格式摄入器（Markdown/Word/PPT/PDF/TXT/对话/思维导图/代码）
+- [x] 9 种文档格式摄入器（Markdown/Word/PPT/PDF/TXT/对话/思维导图/代码/Excel）
 - [x] ChromaDB 向量存储层
 - [x] CLI 工具（ingest / search / info）
 - [x] 中英双语 README
@@ -185,6 +187,10 @@ ariadne-memory/
 - [ ] 图片摄入（截图、照片等元数据提取）
 - [ ] 图片 / 扫描版 PDF OCR（pytesseract / RapidOCR）
 - [ ] 学术文献元数据（BibTeX / RIS）管理
+- [ ] 网页链接摄入（抓取标题、正文、元数据）
+- [ ] 电子邮件摄入（EML/MBOX 解析）
+- [ ] 视频文件摄入（提取字幕/音频转录/关键帧截图）
+- [ ] 音频文件摄入（音乐/播客语音转文字）
 
 ### 第五阶段 MCP Server（规划中）
 - [ ] FastMCP 实现

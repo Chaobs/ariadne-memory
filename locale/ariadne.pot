@@ -1,0 +1,102 @@
+# Ariadne - Message Catalog Template
+# Copyright (C) 2026 Chaobs
+# This file is distributed under the MIT License.
+# FIRST AUTHOR <chaobs@github.com>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Ariadne 0.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/Chaobs/ariadne-memory/issues\n"
+"POT-Creation-Date: 2026-04-18\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: ariadne/cli.py
+msgid "Ingest files into memory"
+msgstr ""
+
+#: ariadne/cli.py
+msgid "Search memory"
+msgstr ""
+
+#: ariadne/cli.py
+msgid "Show system info"
+msgstr ""
+
+#: ariadne/cli.py
+msgid "Ingesting"
+msgstr ""
+
+#: ariadne/cli.py
+msgid "Searching"
+msgstr ""
+
+#: ariadne/cli.py
+msgid "Total documents"
+msgstr ""
+
+#: ariadne/cli.py
+msgid "Source types"
+msgstr ""
+
+#: ariadne/cli.py
+msgid "Storage path"
+msgstr ""
+
+#: ariadne/cli.py
+msgid "Exit"
+msgstr ""
+
+#: ariadne/cli.py
+msgid "Language"
+msgstr ""
+
+#: ariadne/gui.py
+msgid "Ariadne - Knowledge Memory"
+msgstr ""
+
+#: ariadne/gui.py
+msgid "Ingest Files"
+msgstr ""
+
+#: ariadne/gui.py
+msgid "Search"
+msgstr ""
+
+#: ariadne/gui.py
+msgid "Results"
+msgstr ""
+
+#: ariadne/gui.py
+msgid "Settings"
+msgstr ""
+
+#: ariadne/gui.py
+msgid "Drag & drop files here"
+msgstr ""
+
+#: ariadne/gui.py
+msgid "No results found"
+msgstr ""
+
+#: ariadne/gui.py
+msgid "Ingestion complete"
+msgstr ""
+
+#: ariadne/gui.py
+msgid "Error"
+msgstr ""
+
+#: ariadne/gui.py
+msgid "Copy"
+msgstr ""
+
+#: ariadne/gui.py
+msgid "Open source file"
+msgstr ""
