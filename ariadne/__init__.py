@@ -25,3 +25,10 @@ __all__ = [
     "VectorStore",
     "BaseIngestor",
 ]
+
+# GUI is optional (requires tkinter)
+try:
+    import tkinter
+    _GUI_AVAILABLE = True
+except ImportError:
+    _GUI_AVAILABLE = False

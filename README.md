@@ -158,17 +158,17 @@ ariadne-memory/
 
 ## 开发路线 / Roadmap
 
-### 第一阶段 MVP ✅ **进行中**
+### 第一阶段 MVP ✅ **已完成**
 - [x] 项目骨架与目录结构
-- [x] 9 种文档格式摄入器（Markdown/Word/PPT/PDF/TXT/对话/思维导图/代码/Excel）
+- [x] 10 种文档格式摄入器（Markdown/Word/PPT/PDF/TXT/对话/思维导图/代码/Excel/CSV）
 - [x] ChromaDB 向量存储层
 - [x] CLI 工具（ingest / search / info）
 - [x] 中英双语 README
-- [ ] 核心数据模型（Document / Entity / Relation）确认
-- [ ] ChromaDB 运行时验证
-- [ ] 各摄入器单元测试
-- [ ] 批量摄入与进度条支持
-- [ ] **Tkinter GUI 原型**（CLI/GUI 双入口）
+- [x] 核心数据模型（Document / Entity / Relation）确认
+- [x] ChromaDB 运行时验证
+- [x] 各摄入器单元测试
+- [x] 批量摄入与进度条支持
+- [x] **Tkinter GUI 原型**（CLI/GUI 双入口）
 
 ### 第二阶段 LLM 增强（规划中）
 - [ ] LLM 统一抽象接口（DeepSeek / Claude / Qwen / ChatGPT / Gemini / Grok）

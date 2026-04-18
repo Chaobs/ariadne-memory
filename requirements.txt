@@ -22,3 +22,4 @@ PyYAML>=6.0
 # Utilities
 tqdm>=4.65.0           # Progress bars
 pathspec>=0.11.0       # Path pattern matching
+requests>=2.31.0       # HTTP library (required by ChromaDB)

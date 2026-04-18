@@ -17,6 +17,11 @@ except ImportError:
         CYAN = "\033[96m"
         RESET = "\033[0m"
 
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = None  # Progress bar disabled if tqdm not installed
+
 from ariadne import __version__
 from ariadne.memory import VectorStore
 from ariadne.ingest import (
@@ -28,6 +33,8 @@ from ariadne.ingest import (
     ConversationIngestor,
     MindMapIngestor,
     CodeIngestor,
+    ExcelIngestor,
+    CsvIngestor,
 )
 
 INGESTORS = {
@@ -44,6 +51,9 @@ INGESTORS = {
     ".c": CodeIngestor,
     ".js": CodeIngestor,
     ".ts": CodeIngestor,
+    ".xlsx": ExcelIngestor,
+    ".xls": ExcelIngestor,
+    ".csv": CsvIngestor,
 }
 
 
@@ -66,13 +76,15 @@ def main():
 @click.argument("path", type=click.Path(exists=True))
 @click.option("--recursive", "-r", is_flag=True, help="Recursively ingest all supported files")
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed output")
-def ingest(path: str, recursive: bool, verbose: bool):
+@click.option("--batch-size", "-b", default=100, help="Batch size for vector storage")
+def ingest(path: str, recursive: bool, verbose: bool, batch_size: int):
     """Ingest a file or directory into the Ariadne memory system."""
     store = VectorStore()
     target = Path(path)
 
     files_processed = 0
     docs_created = 0
+    errors = []
 
     if target.is_file():
         files = [target]
@@ -87,7 +99,17 @@ def ingest(path: str, recursive: bool, verbose: bool):
         click.secho(f"Error: {path} is not a valid file or directory", fg="red")
         sys.exit(1)
 
-    for file_path in files:
+    if not files:
+        click.secho("No supported files found.", fg="yellow")
+        return
+
+    # Batch accumulation for progress bar
+    batch_docs = []
+
+    # Create progress bar if tqdm is available
+    iterator = tqdm(files, desc="Ingesting", unit="file", disable=tqdm is None)
+
+    for file_path in iterator:
         ingestor_cls = resolve_ingestor(file_path)
         if ingestor_cls is None:
             if verbose:
@@ -98,16 +120,34 @@ def ingest(path: str, recursive: bool, verbose: bool):
             ingestor = ingestor_cls()
             docs = ingestor.ingest(str(file_path))
             if docs:
-                store.add(docs)
+                batch_docs.extend(docs)
                 files_processed += 1
                 docs_created += len(docs)
-                if verbose:
-                    click.echo(f"  {Fore.GREEN}ADD{Fore.RESET}   {file_path} -> {len(docs)} chunks")
-        except Exception as e:
-            if verbose:
-                click.echo(f"  {Fore.RED}ERROR{Fore.RESET}  {file_path}: {e}")
 
-    click.secho(f"\nDone! Processed {files_processed} files, created {docs_created} documents.", fg="green")
+                # Flush batch when full
+                if len(batch_docs) >= batch_size:
+                    store.add(batch_docs)
+                    batch_docs = []
+
+                if verbose:
+                    click.echo(f"  {Fore.GREEN}ADD{Fore.RESET}   {file_path.name} -> {len(docs)} chunks")
+        except Exception as e:
+            errors.append((str(file_path), str(e)))
+            if verbose:
+                click.echo(f"  {Fore.RED}ERROR{Fore.RESET}  {file_path.name}: {e}")
+
+    # Flush remaining docs
+    if batch_docs:
+        store.add(batch_docs)
+
+    # Summary
+    click.secho(f"\n{'='*50}", fg="cyan")
+    click.secho(f"Done! Processed {files_processed} files, created {docs_created} documents.", fg="green")
+    if errors:
+        click.secho(f"Errors: {len(errors)}", fg="red")
+        if verbose:
+            for path, err in errors:
+                click.echo(f"  - {path}: {err}")
 
 
 @main.command()
@@ -148,6 +188,21 @@ def info(stats: bool):
             click.echo(f"Documents indexed: {count}")
         except Exception:
             click.echo("Documents indexed: (unable to retrieve)")
+
+
+@main.command()
+def gui():
+    """Launch the Tkinter GUI (prototype)."""
+    try:
+        from ariadne.gui import main as gui_main
+        gui_main()
+    except ImportError:
+        click.secho("Error: tkinter is not available on this system.", fg="red")
+        click.secho("GUI requires a graphical environment (Windows/macOS/Linux desktop).", fg="yellow")
+        sys.exit(1)
+    except Exception as e:
+        click.secho(f"Error launching GUI: {e}", fg="red")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
