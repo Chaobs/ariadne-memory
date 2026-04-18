@@ -1,8 +1,47 @@
 """
-Ariadne MCP Package — MCP Server implementation.
+Ariadne MCP Server - Model Context Protocol integration for AI memory.
 
-Note: MCP Server implementation is planned for Phase 4.
-This package is a placeholder for the architecture.
+This module provides an MCP-compatible server that exposes Ariadne's
+capabilities (search, ingest, graph) as MCP tools, resources, and prompts.
+
+MCP Protocol Version: 2024-11-05
 """
 
-__all__ = []
+from .server import AriadneMCPServer, create_server
+from .resources import (
+    AriadneResourceManager,
+    DocumentResource,
+    GraphResource,
+    ConfigResource,
+)
+from .tools import (
+    AriadneToolHandler,
+    IngestTool,
+    SearchTool,
+    GraphQueryTool,
+    StatsTool,
+)
+from .prompts import (
+    AriadnePromptManager,
+    SearchPrompt,
+    IngestPrompt,
+    GraphPrompt,
+)
+
+__all__ = [
+    "AriadneMCPServer",
+    "create_server",
+    "AriadneResourceManager",
+    "DocumentResource",
+    "GraphResource",
+    "ConfigResource",
+    "AriadneToolHandler",
+    "IngestTool",
+    "SearchTool",
+    "GraphQueryTool",
+    "StatsTool",
+    "AriadnePromptManager",
+    "SearchPrompt",
+    "IngestPrompt",
+    "GraphPrompt",
+]

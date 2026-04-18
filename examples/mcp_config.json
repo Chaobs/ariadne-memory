@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "ariadne": {
+      "command": "python",
+      "args": [
+        "-m",
+        "ariadne.tools.mcp_server"
+      ],
+      "env": {
+        "PYTHONPATH": "path/to/Ariadne"
+      }
+    }
+  }
+}

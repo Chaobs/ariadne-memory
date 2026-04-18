@@ -204,10 +204,13 @@ ariadne-memory/
 - [x] 视频文件摄入（提取字幕/音频转录/关键帧截图）
 - [x] 音频文件摄入（音乐/播客语音转文字）
 
-### 第五阶段 MCP Server（规划中）
-- [ ] FastMCP 实现
-- [ ] 核心工具：`memory_write` / `memory_search` / `graph_query` / `timeline_view`
-- [ ] 接入 Claude Code / WorkBuddy / Cursor 验证
+### 第五阶段 MCP Server ✅ **已完成**
+- [x] AriadneMCPServer 核心实现（支持 stdio / HTTP 传输）
+- [x] MCP Tools：`ariadne_search` / `ariadne_ingest` / `ariadne_graph_query` / `ariadne_stats`
+- [x] MCP Resources：`collections` / `stats` / `config` / `graph`
+- [x] MCP Prompts：`search` / `ingest` / `graph` / `context` / `compare`
+- [x] Claude Desktop / Cursor 集成配置示例
+- [x] 详细使用文档 (`docs/MCP.md`)
 
 ### 第六阶段 社区运营与迭代（持续）
 - [x] GitHub 正式发布
