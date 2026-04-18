@@ -51,7 +51,19 @@
 | Excel | `.xlsx/.xls` | `ExcelIngestor` | 按工作表/行列提取，含单元格注释 |
 | Excel（CSV） | `.csv` | `CsvIngestor` | 保留表头作为上下文，按行切分 |
 
-> 📖 **第四阶段规划**: EPUB / MOBI 电子书、图片 OCR、扫描 PDF 识别、学术文献元数据（BibTeX / RIS）
+### 媒体与学术工具摄入器
+
+| 格式 | 扩展名 | 摄入器 | 处理方式 |
+|------|--------|--------|----------|
+| EPUB电子书 | `.epub` | `EPUBIngestor` | 元数据+章节结构提取 |
+| 图片 | `.jpg/.png/.gif` | `ImageIngestor` | EXIF元数据提取 |
+| OCR | 扫描PDF/图片 | `OCRIngestor` | RapidOCR/Tesseract文字识别 |
+| BibTeX | `.bib` | `BibTeXIngestor` | 解析学术文献元数据 |
+| RIS | `.ris` | `RISIngestor` | 解析学术引用数据 |
+| 网页 | URL | `WebIngestor` | 抓取标题/正文/元数据 |
+| 邮件 | `.eml/.mbox` | `EmailIngestor` | 解析邮件头/正文/附件 |
+| 视频 | `.mp4/.avi/.mkv` | `VideoIngestor` | 元数据+字幕提取 |
+| 音频 | `.mp3/.wav/.m4a` | `AudioIngestor` | 元数据+转录(Whisper) |
 
 ---
 
@@ -182,15 +194,15 @@ ariadne-memory/
 - [x] 跨源关联查询
 - [x] 知识时间线视图
 
-### 第四阶段 媒体支持与学术工具（规划中）
-- [ ] EPUB / MOBI 电子书摄入（ebooklib）
-- [ ] 图片摄入（截图、照片等元数据提取）
-- [ ] 图片 / 扫描版 PDF OCR（pytesseract / RapidOCR）
-- [ ] 学术文献元数据（BibTeX / RIS）管理
-- [ ] 网页链接摄入（抓取标题、正文、元数据）
-- [ ] 电子邮件摄入（EML/MBOX 解析）
-- [ ] 视频文件摄入（提取字幕/音频转录/关键帧截图）
-- [ ] 音频文件摄入（音乐/播客语音转文字）
+### 第四阶段 媒体支持与学术工具 ✅ **已完成**
+- [x] EPUB / MOBI 电子书摄入（ebooklib）
+- [x] 图片摄入（截图、照片等元数据提取）
+- [x] 图片 / 扫描版 PDF OCR（pytesseract / RapidOCR）
+- [x] 学术文献元数据（BibTeX / RIS）管理
+- [x] 网页链接摄入（抓取标题、正文、元数据）
+- [x] 电子邮件摄入（EML/MBOX 解析）
+- [x] 视频文件摄入（提取字幕/音频转录/关键帧截图）
+- [x] 音频文件摄入（音乐/播客语音转文字）
 
 ### 第五阶段 MCP Server（规划中）
 - [ ] FastMCP 实现
