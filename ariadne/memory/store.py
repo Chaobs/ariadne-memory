@@ -62,6 +62,13 @@ class VectorStore:
     - Documents are de-duplicated by doc_id
     - Supports multiple collections (for multi-memory systems)
 
+    ⚠️  ChromaDB's PersistentClient uses *lazy* initialisation for its internal
+    HNSW index.  The ``PersistentClient(path)`` constructor always succeeds even
+    when the persisted index files are corrupt.  The real error is only thrown
+    when you call ``count()``, ``query()``, or ``add()`` — i.e. when the index is
+    first accessed.  This means recovery code must be placed at the **call site**
+    (``get_store() / _probe()``), not just in ``__init__``.
+
     Usage:
         >>> store = VectorStore()
         >>> store.add(my_documents)
@@ -69,6 +76,9 @@ class VectorStore:
     """
 
     DEFAULT_COLLECTION = "ariadne_memory"
+
+    # Class-level flag to avoid infinite recursion during recovery probe
+    _recovering = False
 
     def __init__(self, persist_dir: Optional[str] = None, collection_name: Optional[str] = None):
         """
@@ -106,6 +116,23 @@ class VectorStore:
                     # Corrupted DB wiped; retry once with fresh DB
                     continue
                 raise  # Non-corruption error or recovery failed
+
+    def probe(self) -> bool:
+        """Force a lightweight operation to trigger lazy HNSW index loading.
+
+        ChromaDB defers HNSW index construction until the first read/write.
+        If the persisted index files are corrupt, this method raises the
+        exception immediately so callers can recover.
+
+        Returns:
+            True if the store is healthy and usable.
+
+        Raises:
+            Exception: Any corruption/lazy-load error from ChromaDB internals.
+        """
+        # count() is the cheapest operation that forces index activation
+        self._collection.count()
+        return True
 
     @staticmethod
     def _wipe_chroma_files(persist_dir: str) -> bool:

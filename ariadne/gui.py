@@ -1333,6 +1333,11 @@ class AriadneGUI:
     # === Info Operations ===
     
     def _update_stats(self):
+        """Update the document count display for current memory system.
+        
+        Uses get_store() which now includes auto-recovery for HNSW corruption.
+        If recovery fails, shows error message instead of crashing.
+        """
         try:
             store = self.manager.get_store(self.current_system)
             count = store.count()
@@ -1340,7 +1345,10 @@ class AriadneGUI:
                 text=f"Current: {self.current_system} | {get_label('docs')}: {count}"
             )
         except Exception as e:
-            self.ingest_stats_label.config(text=f"Error: {e}")
+            # get_store() already attempted auto-recovery.
+            # This means recovery genuinely failed — show user-friendly message
+            err_msg = str(e).split("\n")[0]  # First line only, avoid huge stack traces
+            self.ingest_stats_label.config(text=f"Error: {err_msg}")
     
     def _update_info(self):
         self.info_text.delete(1.0, tk.END)
@@ -1500,6 +1508,17 @@ def main():
     try:
         root = tk.Tk()
         app = AriadneGUI(root)
+        
+        # Register graceful shutdown on window close
+        def on_closing():
+            try:
+                from ariadne.memory.manager import MemoryManager
+                MemoryManager.graceful_shutdown(app.manager)
+            except Exception:
+                pass  # Best-effort; don't block exit
+            root.destroy()
+        
+        root.protocol("WM_DELETE_WINDOW", on_closing)
         root.mainloop()
     except Exception as e:
         import traceback

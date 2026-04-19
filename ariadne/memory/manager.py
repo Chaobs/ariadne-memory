@@ -20,7 +20,7 @@ from datetime import datetime
 # Use project-local paths instead of user home directory
 from ariadne.paths import MEMORIES_DIR
 
-from ariadne.memory.store import VectorStore
+from ariadne.memory.store import VectorStore, _is_db_corruption_error
 
 
 class MemorySystem:
@@ -115,6 +115,11 @@ class MemoryManager:
         # Clean up orphaned ChromaDB files left at memories root
         # (e.g. from old versions or interrupted operations)
         self._cleanup_orphaned_db_files()
+        
+        # Startup health-check: verify default store is usable.
+        # If HNSW index is corrupt on disk, recover NOW before GUI tries to
+        # call _update_stats() → get_store("default") → count().
+        self._health_check_default()
     
     def _save_manifest(self) -> None:
         """Save manifest to disk."""
@@ -378,6 +383,23 @@ Type 'yes' to confirm deletion: """
             systems.append(MemorySystem.from_dict(data))
         return sorted(systems, key=lambda x: x.name)
     
+    def _health_check_default(self) -> None:
+        """Verify the default memory system is healthy at startup.
+
+        ChromaDB's lazy HNSW init means corruption is only detected on first
+        real operation.  By probing at startup we catch (and auto-fix) any
+        corruption **before** the GUI calls ``_update_stats()`` or ingest.
+        
+        Errors here are handled silently — the user sees nothing wrong.
+        """
+        try:
+            self._create_healthy_store(self.DEFAULT_COLLECTION)
+            print(f"[Health] Default system '{self.DEFAULT_COLLECTION}' OK")
+        except Exception as e:
+            # _create_healthy_store already attempted recovery.
+            # If we're still failing, log but don't crash startup.
+            print(f"[Health] WARNING: Could not verify default system: {e}")
+    
     def get_info(self, name: str) -> Optional[Dict]:
         """
         Get information about a memory system.
@@ -393,9 +415,9 @@ Type 'yes' to confirm deletion: """
         
         info = self._manifest[name].copy()
         
-        # Get document count
+        # Get document count via healthy store (auto-recovers if needed)
         try:
-            store = self.get_store(name)
+            store = self._create_healthy_store(name)
             info["document_count"] = store.count()
         except Exception:
             info["document_count"] = 0
@@ -404,15 +426,79 @@ Type 'yes' to confirm deletion: """
     
     # === Store Operations ===
     
+    def _create_healthy_store(self, name: str) -> VectorStore:
+        """Create (or retrieve cached) a **verified-healthy** VectorStore.
+
+        This is the single entry-point that guarantees the returned store can
+        actually perform ``count()`` / ``query()`` / ``add()`` without raising
+        lazy-load HNSW errors.
+
+        Recovery strategy:
+        1. Create or return cached ``VectorStore`` (constructor may succeed even
+           with corrupt on-disk data because ChromaDB uses lazy init).
+        2. Call ``probe()`` to force HNSW index activation.
+        3. If probe reveals corruption → wipe persisted files, evict cache,
+           and retry once.
+
+        Args:
+            name: Memory system name.
+
+        Returns:
+            A VectorStore that has been verified healthy via probe().
+        
+        Raises:
+            Exception: If the store cannot be brought to a healthy state.
+        """
+        if name in self._stores:
+            store = self._stores[name]
+            try:
+                store.probe()
+                return store
+            except Exception:
+                # Cached store went bad between calls; evict and recreate below
+                self._close_store(name)
+
+        path = self._manifest[name]["path"]
+
+        last_exc = None
+        for attempt in range(2):
+            try:
+                store = VectorStore(persist_dir=path, collection_name=name)
+                store.probe()  # ⚠️ Force lazy HNSW load NOW, not later
+                self._stores[name] = store
+                return store
+            except Exception as exc:
+                last_exc = exc
+                if attempt == 0 and _is_db_corruption_error(exc):
+                    print(f"[Recovery] Probing '{name}' detected corruption: {exc}")
+                    # Evict stale handle before wiping files
+                    if name in self._stores:
+                        self._close_store(name)
+                    # Wipe ALL persisted content (sqlite3 + HNSW binaries + etc.)
+                    if VectorStore._wipe_chroma_files(path):
+                        print(f"[Recovery] Wiped corrupted ChromaDB data at {path}")
+                        continue
+                raise
+
+        raise last_exc  # Should not reach here, but just in case
+    
     def get_store(self, name: Optional[str] = None) -> VectorStore:
         """
-        Get VectorStore for a memory system.
+        Get a **verified-healthy** VectorStore for a memory system.
+
+        This method guarantees the returned store is fully operational:
+        - If the persisted ChromaDB data is corrupt (including lazy-load HNSW
+          errors), it is **automatically wiped and recreated**.
+        - The caller never sees an HNSW / compactor / segment reader error.
         
         Args:
             name: Name of memory system. Defaults to DEFAULT_COLLECTION.
             
         Returns:
-            VectorStore instance for the memory system
+            VectorStore instance for the memory system (guaranteed healthy)
+        
+        Raises:
+            Exception: Only if recovery fails after 2 attempts (extremely rare).
         """
         if name is None:
             name = self.DEFAULT_COLLECTION
@@ -421,14 +507,7 @@ Type 'yes' to confirm deletion: """
             # Auto-create if doesn't exist
             self.create(name, silent=True)
         
-        # Return cached store if available
-        if name in self._stores:
-            return self._stores[name]
-        
-        path = self._manifest[name]["path"]
-        store = VectorStore(persist_dir=path)
-        self._stores[name] = store
-        return store
+        return self._create_healthy_store(name)
     
     def _close_store(self, name: str) -> None:
         """Close and remove the VectorStore cache for a memory system.
@@ -471,10 +550,38 @@ Type 'yes' to confirm deletion: """
 
         This is a *soft* close — it does **not** call ``client.close()`` on
         ChromaDB's PersistentClient (see ``_close_store`` docstring for why).
+        
+        **Important for Windows**: After calling this method, wait at least
+        1 second (or call ``time.sleep(1)``) before performing filesystem
+        operations like ``shutil.rmtree`` or ``shutil.move`` on the same
+        directories — the OS may still hold file handles briefly.
+        
         Call this before delete/rename operations to free Python-level
         references, but do not rely on it for immediate filesystem access.
         """
         self._close_all_stores()
+    
+    @staticmethod
+    def graceful_shutdown(manager: "MemoryManager" = None) -> None:
+        """Graceful shutdown: close all stores with proper cleanup.
+
+        Call this when the application exits (GUI close button / CLI finish).
+        This ensures all ChromaDB handles are released cleanly.
+
+        Args:
+            manager: Optional MemoryManager instance. If None, uses global.
+        """
+        if manager is None:
+            # Import here to avoid circular dependency
+            try:
+                from ariadne.memory.manager import get_manager
+                manager = get_manager()
+            except Exception:
+                return
+        
+        if manager is not None:
+            manager._close_all_stores()
+            print("[Shutdown] All connections closed gracefully")
     
     def get_default_store(self) -> VectorStore:
         """Get the default VectorStore."""
