@@ -365,70 +365,333 @@ class MemorySystemDialog(tk.Toplevel):
 
 
 class MergeDialog(tk.Toplevel):
-    """Dialog for merging memory systems."""
-    
+    """Dialog for merging memory systems with per-system checkbox selection."""
+
+    # Max visible rows before scrolling kicks in
+    MAX_VISIBLE_ROWS = 8
+
     def __init__(self, parent, manager: MemoryManager):
         super().__init__(parent)
         self.title("Merge Memory Systems")
         self.transient(parent)
         self.grab_set()
-        
+
         self.manager = manager
         self.result = None
-        
+
+        # {system_name: BooleanVar} for each checkbox
+        self.check_vars: Dict[str, tk.BooleanVar] = {}
+
         self._create_widgets()
         self._center_window()
-    
+
     def _create_widgets(self):
         frame = ttk.Frame(self, padding=20)
         frame.pack(fill=tk.BOTH, expand=True)
-        
-        ttk.Label(frame, text="New System Name:").grid(row=0, column=0, sticky=tk.W, pady=5)
+
+        # --- Row 0: New System Name ---
+        ttk.Label(frame, text="New System Name:").grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
         self.name_entry = ttk.Entry(frame, width=30)
-        self.name_entry.grid(row=0, column=1, pady=5)
-        
-        ttk.Label(frame, text="Select systems to merge:").grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=10)
-        
-        self.listbox = tk.Listbox(frame, selectmode=tk.EXTENDED, height=10, width=40)
-        self.listbox.grid(row=2, column=0, columnspan=2, pady=5)
-        
-        for name in self.manager._manifest.keys():
-            if name != "default":
-                self.listbox.insert(tk.END, name)
-        
+        self.name_entry.grid(row=0, column=1, sticky=tk.W, pady=(0, 5))
+
+        # --- Row 1: Checkbox list (scrollable) ---
+        ttk.Label(frame, text="Select systems to merge:").grid(
+            row=1, column=0, columnspan=3, sticky=tk.W, pady=(10, 5))
+
+        # Canvas + Scrollbar for scrollable checkbox area
+        canvas_container = ttk.Frame(frame)
+        canvas_container.grid(row=2, column=0, columnspan=3, sticky=tk.NSEW, pady=5)
+
+        scrollbar = ttk.Scrollbar(canvas_container, orient=tk.VERTICAL)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.canvas = tk.Canvas(canvas_container,
+                                yscrollcommand=scrollbar.set,
+                                height=self.MAX_VISIBLE_ROWS * 26,
+                                highlightthickness=0)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.canvas.yview)
+
+        # Inner frame that holds all checkboxes
+        self.checkbox_frame = ttk.Frame(self.canvas)
+        self.canvas.create_window((0, 0), window=self.checkbox_frame, anchor=tk.NW)
+
+        system_names = sorted(self.manager._manifest.keys())  # Include ALL, including "default"
+        for i, name in enumerate(system_names):
+            is_default = (name == self.manager.DEFAULT_COLLECTION)
+            var = tk.BooleanVar(value=False)
+            self.check_vars[name] = var
+
+            label_text = f"{name}  (default)" if is_default else name
+            cb = ttk.Checkbutton(self.checkbox_frame, text=label_text, variable=var)
+            cb.grid(row=i, column=0, sticky=tk.W, padx=4, pady=2)
+
+            # If this is "default", bind callback to enforce naming rule
+            if is_default:
+                var.trace_add("write", lambda *_, v=var: self._on_default_toggled(v))
+
+        # Update scroll region after populating
+        self.checkbox_frame.update_idletasks()
+        self.canvas.config(scrollregion=self.canvas.bbox("all"))
+
+        # --- Row 3: Select All / Invert buttons ---
+        select_btn_row = ttk.Frame(frame)
+        select_btn_row.grid(row=3, column=0, columnspan=3, sticky=tk.W, pady=(5, 5))
+
+        ttk.Button(select_btn_row, text="Select All",
+                   command=self._select_all).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(select_btn_row, text="Invert",
+                   command=self._invert_selection).pack(side=tk.LEFT)
+
+        # --- Row 4: Delete source after merge ---
         self.delete_var = tk.BooleanVar()
         ttk.Checkbutton(frame, text="Delete source systems after merge",
-                       variable=self.delete_var).grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=10)
-        
+                        variable=self.delete_var).grid(
+                            row=4, column=0, columnspan=3, sticky=tk.W, pady=(10, 5))
+
+        # --- Row 5: Action buttons ---
         btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=4, column=0, columnspan=2, pady=20)
-        
+        btn_frame.grid(row=5, column=0, columnspan=3, pady=(10, 0))
+
         ttk.Button(btn_frame, text="Merge", command=self._on_merge).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.LEFT)
-    
+
+    # ------------------------------------------------------------------
+    # Selection helpers
+    # ------------------------------------------------------------------
+
+    def _select_all(self):
+        for var in self.check_vars.values():
+            var.set(True)
+
+    def _invert_selection(self):
+        for var in self.check_vars.values():
+            var.set(not var.get())
+
+    def _on_default_toggled(self, var: tk.BooleanVar):
+        """When default is checked: (1) force name to 'default', (2) uncheck all others."""
+        if var.get():
+            # Set target name to "default"
+            self.name_entry.delete(0, tk.END)
+            self.name_entry.insert(0, "default")
+            # Disable the name entry — must be "default"
+            self.name_entry.config(state=tk.DISABLED)
+            # Uncheck everything except default
+            for name, v in self.check_vars.items():
+                if name != self.manager.DEFAULT_COLLECTION:
+                    v.set(False)
+        else:
+            # Re-enable name entry
+            self.name_entry.config(state=tk.NORMAL)
+
+    def _get_selected_names(self) -> List[str]:
+        return [name for name, var in self.check_vars.items() if var.get()]
+
+    # ------------------------------------------------------------------
+    # Window & merge action
+    # ------------------------------------------------------------------
+
     def _center_window(self):
         self.update_idletasks()
-        x = self.winfo_toplevel().winfo_x() + (self.winfo_toplevel().winfo_width() - self.winfo_width()) // 2
-        y = self.winfo_toplevel().winfo_y() + (self.winfo_toplevel().winfo_height() - self.winfo_height()) // 2
+        x = (self.winfo_screenwidth() - self.winfo_width()) // 2
+        y = (self.winfo_screenheight() - self.winfo_height()) // 2
         self.geometry(f"+{x}+{y}")
-    
+
     def _on_merge(self):
         new_name = self.name_entry.get().strip()
         if not new_name:
             messagebox.showwarning("Error", "Name cannot be empty")
             return
-        
-        selected = [self.listbox.get(i) for i in self.listbox.curselection()]
+
+        selected = self._get_selected_names()
         if not selected:
-            messagebox.showwarning("Error", "Please select at least one system")
+            messagebox.showwarning("Error", "Please select at least one system to merge")
             return
-        
+
+        # If merging INTO default, validate
+        if new_name == self.manager.DEFAULT_COLLECTION:
+            if self.manager.DEFAULT_COLLECTION not in selected:
+                messagebox.showwarning(
+                    "Error",
+                    f"When merging into '{self.manager.DEFAULT_COLLECTION}', "
+                    f"you must also include it in the selection."
+                )
+                return
+            # Don't allow deleting default source
+            self.delete_var.set(False)
+
         try:
             self.manager.merge(selected, new_name, delete_sources=self.delete_var.get())
             self.result = new_name
             self.destroy()
         except Exception as e:
             messagebox.showerror("Error", str(e))
+
+
+class DeleteDialog(tk.Toplevel):
+    """Dialog for deleting one or more memory systems with per-system checkbox selection."""
+
+    MAX_VISIBLE_ROWS = 8
+
+    def __init__(self, parent, manager: MemoryManager, current_system: str):
+        super().__init__(parent)
+        self.title("Delete Memory Systems")
+        self.transient(parent)
+        self.grab_set()
+
+        self.manager = manager
+        self.current_system = current_system
+        self.result = None  # Will hold list of deleted system names
+
+        # {system_name: BooleanVar}
+        self.check_vars: Dict[str, tk.BooleanVar] = {}
+
+        self._create_widgets()
+        self._center_window()
+
+    def _create_widgets(self):
+        frame = ttk.Frame(self, padding=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        # --- Info label ---
+        info_label = ttk.Label(
+            frame,
+            text="Select memory systems to delete.\n"
+                 "Default system and the currently active system cannot be deleted.",
+            foreground="gray",
+            justify=tk.LEFT,
+        )
+        info_label.grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 10))
+
+        # --- Checkbox list (scrollable) ---
+        canvas_container = ttk.Frame(frame)
+        canvas_container.grid(row=1, column=0, columnspan=3, sticky=tk.NSEW, pady=5)
+
+        scrollbar = ttk.Scrollbar(canvas_container, orient=tk.VERTICAL)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.canvas = tk.Canvas(canvas_container,
+                                yscrollcommand=scrollbar.set,
+                                height=self.MAX_VISIBLE_ROWS * 26,
+                                highlightthickness=0)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.canvas.yview)
+
+        self.checkbox_frame = ttk.Frame(self.canvas)
+        self.canvas.create_window((0, 0), window=self.checkbox_frame, anchor=tk.NW)
+
+        system_names = sorted(self.manager._manifest.keys())
+        for i, name in enumerate(system_names):
+            is_default = (name == self.manager.DEFAULT_COLLECTION)
+            is_current = (name == self.current_system)
+            is_disabled = is_default or is_current
+
+            var = tk.BooleanVar(value=False)
+            self.check_vars[name] = var
+
+            cb = ttk.Checkbutton(
+                self.checkbox_frame,
+                text=f"{name}  {'(default)' if is_default else '(active)' if is_current else ''}",
+                variable=var,
+                state=tk.DISABLED if is_disabled else tk.NORMAL,
+            )
+            cb.grid(row=i, column=0, sticky=tk.W, padx=4, pady=2)
+
+        # Update scroll region
+        self.checkbox_frame.update_idletasks()
+        self.canvas.config(scrollregion=self.canvas.bbox("all"))
+
+        # --- Select All / Invert buttons ---
+        select_btn_row = ttk.Frame(frame)
+        select_btn_row.grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=(5, 5))
+
+        ttk.Button(select_btn_row, text="Select All",
+                   command=self._select_all).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(select_btn_row, text="Invert",
+                   command=self._invert_selection).pack(side=tk.LEFT)
+
+        # --- Warning ---
+        warn_label = ttk.Label(
+            frame,
+            text="⚠ Deleted data CANNOT be recovered!",
+            foreground="red",
+        )
+        warn_label.grid(row=3, column=0, columnspan=3, sticky=tk.W, pady=(10, 5))
+
+        # --- Action buttons ---
+        btn_frame = ttk.Frame(frame)
+        btn_frame.grid(row=4, column=0, columnspan=3, pady=(5, 0))
+
+        ttk.Button(btn_frame, text="Delete Selected", command=self._on_delete).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.LEFT)
+
+    def _select_all(self):
+        for name, var in self.check_vars.items():
+            is_default = (name == self.manager.DEFAULT_COLLECTION)
+            is_current = (name == self.current_system)
+            if not is_default and not is_current:
+                var.set(True)
+
+    def _invert_selection(self):
+        for name, var in self.check_vars.items():
+            is_default = (name == self.manager.DEFAULT_COLLECTION)
+            is_current = (name == self.current_system)
+            if not is_default and not is_current:
+                var.set(not var.get())
+
+    def _get_selected_names(self) -> List[str]:
+        return [name for name, var in self.check_vars.items() if var.get()]
+
+    def _center_window(self):
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() - self.winfo_width()) // 2
+        y = (self.winfo_screenheight() - self.winfo_height()) // 2
+        self.geometry(f"+{x}+{y}")
+
+    def _on_delete(self):
+        selected = self._get_selected_names()
+        if not selected:
+            messagebox.showwarning("Warning", "Please select at least one system to delete.")
+            return
+
+        # Confirmation dialog with details
+        detail_lines = [f"  • {name}" for name in selected]
+        confirm_msg = (
+            f"You are about to permanently DELETE {len(selected)} memory system(s):\n"
+            f"\n{''.join(detail_lines)}\n\n"
+            f"This operation CANNOT be undone. All files will be removed from disk.\n\n"
+            f"Proceed with deletion?"
+        )
+
+        if not messagebox.askyesno("Confirm Deletion", confirm_msg):
+            return
+
+        errors = []
+        for name in list(selected):
+            try:
+                # Close ALL connections before each delete attempt
+                self.manager.close_all_connections()
+                self.manager.delete(name, confirm=False)
+            except Exception as e:
+                errors.append((name, str(e)))
+
+        self.result = selected
+
+        # Report results
+        success_count = len(selected) - len(errors)
+        if errors:
+            error_lines = "\n".join(f"  • {n}: {e}" for n, e in errors)
+            msg = (
+                f"Deleted {success_count}/{len(selected)} system(s) successfully.\n\n"
+                f"The following could NOT be fully deleted from disk:\n{error_lines}\n\n"
+                f"This usually means a file lock was held by the database engine.\n"
+                f"The references have been removed; you may manually delete the folders."
+            )
+            messagebox.showwarning("Partial Success", msg)
+        else:
+            messagebox.showinfo("Success", f"Successfully deleted {success_count} memory system(s).")
+
+        self.destroy()
 
 
 class AriadneGUI:
@@ -739,20 +1002,15 @@ class AriadneGUI:
             self._update_memory_list()
     
     def _delete_memory(self):
-        if self.current_system == self.manager.DEFAULT_COLLECTION:
-            messagebox.showwarning("Cannot Delete", "Cannot delete the default memory system")
-            return
+        dialog = DeleteDialog(self.root, self.manager, self.current_system)
+        self.root.wait_window(dialog)
         
-        if messagebox.askyesno("Confirm Delete",
-                             f"Delete memory system '{self.current_system}'?\nThis cannot be undone."):
-            try:
-                self.manager.delete(self.current_system, confirm=False)
+        if dialog.result:
+            # If current system was in deleted list (shouldn't happen due to UI lock), switch
+            if self.current_system not in [s.name for s in self.manager.list_systems()]:
                 self.current_system = self.manager.DEFAULT_COLLECTION
-                self._update_memory_list()
-                self._update_stats()
-                messagebox.showinfo("Success", "Memory system deleted")
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
+            self._update_memory_list()
+            self._update_stats()
     
     def _merge_memory(self):
         dialog = MergeDialog(self.root, self.manager)
@@ -909,46 +1167,127 @@ class AriadneGUI:
         
         def worker():
             docs_added = 0
-            errors = []
+            skipped = 0
+            errors = []  # [(file_path, error_message), ...]
             
             for i, file_path in enumerate(self.selected_files):
                 try:
                     path = Path(file_path)
                     suffix = path.suffix.lower()
-                    
+
+                    # Validate file exists and is readable
+                    if not path.exists():
+                        raise FileNotFoundError(f"File not found: {file_path}")
+                    if not path.is_file():
+                        raise IOError(f"Not a regular file: {file_path}")
+
                     if suffix in INGESTORS:
                         ingestor_cls = INGESTORS[suffix]
                         ingestor = ingestor_cls()
-                        docs = ingestor.ingest(file_path)
+                        
+                        try:
+                            docs = ingestor.ingest(file_path)
+                        except Exception as ingest_err:
+                            raise RuntimeError(
+                                f"{path.name}: Ingestion failed — {ingest_err}"
+                            ) from ingest_err
                         
                         if docs:
-                            store = self.manager.get_store(self.current_system)
-                            store.add(docs)
-                            docs_added += len(docs)
+                            try:
+                                store = self.manager.get_store(self.current_system)
+                                store.add(docs)
+                                docs_added += len(docs)
+                            except Exception as db_err:
+                                raise RuntimeError(
+                                    f"{path.name}: Database write failed — {db_err}"
+                                ) from db_err
+                        else:
+                            skipped += 1
+                            if self.verbose_var.get():
+                                print(f"EMPTY {path.name} (no content extracted)")
                     else:
+                        skipped += 1
                         if self.verbose_var.get():
-                            print(f"SKIP {path.name} (unsupported format)")
-                
+                            print(f"SKIP {path.name} (unsupported format: {suffix})")
+                    
                 except Exception as e:
                     errors.append((file_path, str(e)))
                 
                 self.root.after(0, lambda p=i+1: self.progress.config(value=p))
             
-            self.root.after(0, lambda: self._ingest_complete(docs_added, len(self.selected_files), errors))
+            self.root.after(0, lambda: self._ingest_complete(
+                docs_added, skipped, len(self.selected_files), errors))
         
         threading.Thread(target=worker, daemon=True).start()
     
-    def _ingest_complete(self, docs_count, files_count, errors):
-        self.status_label.config(text=f"Ingested {docs_count} documents from {files_count} files")
+    def _ingest_complete(self, docs_count, skipped, files_count, errors):
         self.progress["value"] = 0
         self._update_stats()
-        
+
+        # Build status message
+        parts = []
+        if docs_count > 0:
+            parts.append(f"{docs_count} documents ingested")
+        if skipped > 0:
+            parts.append(f"{skipped} skipped (empty/unsupported)")
         if errors:
-            self.ingest_stats_label.config(text=f"{len(errors)} error(s)", foreground="red")
+            parts.append(f"{len(errors)} error(s)")
+
+        status_text = " | ".join(parts) if parts else "No files processed"
+        self.status_label.config(text=status_text)
+
+        # Update stats label
+        if errors:
+            self.ingest_stats_label.config(
+                text=f"⚠ {len(errors)} error(s) — hover or see below", foreground="red")
+        elif docs_count == 0:
+            self.ingest_stats_label.config(
+                text="⚠ No documents were extracted from any file.", foreground="orange")
         else:
             self.ingest_stats_label.config(text="", foreground="gray")
-        
-        messagebox.showinfo("Complete", f"Successfully ingested {docs_count} documents!")
+
+        # Show result dialog based on actual outcome
+        if errors and docs_count == 0:
+            # TOTAL FAILURE
+            detail_lines = [f"  • {Path(f).name}: {e}" for f, e in errors[:10]]
+            if len(errors) > 10:
+                detail_lines.append(f"  ... and {len(errors)-10} more errors")
+            
+            messagebox.showerror(
+                "Ingestion Failed",
+                f"Failed to ingest any documents ({len(errors)} errors):\n\n"
+                + "\n".join(detail_lines)
+            )
+        elif errors:
+            # PARTIAL FAILURE
+            detail_lines = [f"  • {Path(f).name}: {e}" for f, e in errors[:10]]
+            if len(errors) > 10:
+                detail_lines.append(f"  ... and {len(errors)-10} more errors")
+
+            msg = (
+                f"Partial success:\n\n"
+                f"  ✅ {docs_count} documents ingested successfully\n"
+                f"  ⚠ {len(errors)} file(s) failed:\n"
+                + "\n".join(detail_lines)
+            )
+            messagebox.showwarning("Ingestion Complete (with errors)", msg)
+        elif docs_count == 0:
+            # No errors but nothing ingested
+            messagebox.showinfo(
+                "Nothing Ingested",
+                f"No documents were produced from the {files_count} selected file(s).\n\n"
+                f"This usually means:\n"
+                f"  • Files are empty or contain only whitespace\n"
+                f"  • File format is not supported\n"
+                f"  • Encountered encoding issues (try UTF-8 files)"
+            )
+        else:
+            # Full success
+            messagebox.showinfo(
+                "Success",
+                f"✅ Successfully ingested {docs_count} document(s) "
+                f"from {files_count - skipped - len(errors)} file(s)."
+            )
     
     # === Search Operations ===
     

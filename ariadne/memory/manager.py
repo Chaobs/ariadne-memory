@@ -413,15 +413,22 @@ Type 'yes' to confirm deletion: """
     
     def _close_store(self, name: str) -> None:
         """Close and remove the VectorStore cache for a memory system (releases file locks)."""
+        import gc
         if name in self._stores:
             try:
                 store = self._stores.pop(name)
                 # Close ChromaDB client to release sqlite3 lock
                 if hasattr(store, '_client'):
+                    client = store._client
+                    # Try ChromaDB's close method first (v0.4+)
+                    if hasattr(client, 'close'):
+                        client.close()
+                        del store._collection
+                    # Always delete references so GC can collect
                     del store._client
-                if hasattr(store, '_collection'):
                     del store._collection
-                del store  # dereference so GC can collect
+                del store  # dereference
+                gc.collect()
             except Exception as e:
                 print(f"Warning: Error closing store for '{name}': {e}")
     
@@ -429,6 +436,19 @@ Type 'yes' to confirm deletion: """
         """Close all cached VectorStore instances to release file locks."""
         for name in list(self._stores.keys()):
             self._close_store(name)
+
+    def close_all_connections(self) -> None:
+        """
+        Public API: Close ALL database connections and release file locks.
+        
+        Call this before any file-system operations (delete, rename, etc.)
+        to ensure ChromaDB releases its sqlite3 handles on Windows.
+        """
+        import gc
+        self._close_all_stores()
+        # Extra GC passes to ensure Python objects are truly collected
+        for _ in range(3):
+            gc.collect()
     
     def get_default_store(self) -> VectorStore:
         """Get the default VectorStore."""
@@ -450,16 +470,21 @@ Type 'yes' to confirm deletion: """
             True if merged successfully
         """
         # Validate sources
+        target_exists = new_name in self._manifest
         for name in source_names:
             if name not in self._manifest:
                 raise ValueError(f"Memory system '{name}' not found")
-            if name == new_name:
+            if name == new_name and not target_exists:
                 raise ValueError(f"Cannot merge: '{name}' is the target")
         
-        if new_name in self._manifest:
-            raise ValueError(f"Memory system '{new_name}' already exists")
+        if target_exists and new_name not in source_names:
+            # Merging into existing non-source system (e.g., merge into "default") — OK
+            pass
+        elif target_exists and new_name in source_names:
+            raise ValueError(f"Memory system '{new_name}' cannot be both source and target")
         
-        # Create new memory system
+        # Create new memory system only if it doesn't already exist
+        if not target_exists:
         self.create(new_name, f"Merged from: {', '.join(source_names)}", silent=True)
         new_store = self.get_store(new_name)
         
