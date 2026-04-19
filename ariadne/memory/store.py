@@ -20,22 +20,31 @@ from ariadne.ingest.base import Document, SourceType
 
 
 def _is_db_corruption_error(exc: Exception) -> bool:
-    """Check if an exception indicates a corrupted/invalid SQLite database.
+    """Check if an exception indicates a corrupted/invalid SQLite database
+    **or** a ChromaDB internal index failure (HNSW, compactor, segment).
 
-    ChromaDB wraps SQLite errors in various ways. Common patterns:
-    - ``code: 26`` → SQLITE_NOTADB (file is not a database)
-    - ``database disk image is malformed`` → SQLITE_CORRUPT
-    - ``file is encrypted or is not a database`` → legacy format mismatch
+    These errors are non-recoverable at the API level — the only safe remedy
+    is to wipe the persisted files and let PersistentClient start fresh.
     """
     msg = str(exc).lower()
     return any(pattern in msg for pattern in [
+        # --- SQLite-level ---
         "file is not a database",
         "database disk image is malformed",
         "file is encrypted",
         "not a valid sqlite db",
-        "code: 26",
-        "code:11",   # SQLITE_CORRUPT
+        "code: 26",       # SQLITE_NOTADB
+        "code:11",        # SQLITE_CORRUPT
         "malformed",
+        # --- ChromaDB / HNSW-level ---
+        "hnsw",
+        "compactor",
+        "segment reader",
+        "loading hnsw index",
+        "backfill request",
+        "error constructing",
+        "error creating hnsw",
+        "invalid index",
     ])
 
 

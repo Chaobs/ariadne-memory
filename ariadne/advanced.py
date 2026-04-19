@@ -191,9 +191,11 @@ Content to summarize:
         if query:
             content = f"Query: {query}\n\n{content}"
         
-        # Build prompt
+        # Build prompt — inject language instruction at the TOP so it dominates
         prompt = self.SUMMARY_PROMPT.format(content=content)
-        prompt = prompt.replace("Please summarize", lang_prompt.replace(":", ""))
+        # Prepend the localized language instruction; this tells the LLM what
+        # language to use for its entire response.
+        prompt = lang_prompt + "\n\n" + prompt
         
         try:
             response = self.llm.chat(prompt)

@@ -15,6 +15,7 @@ Run with: python -m ariadne.gui
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 import threading
+import tempfile
 import webbrowser
 from pathlib import Path
 from typing import List, Optional

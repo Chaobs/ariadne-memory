@@ -192,6 +192,21 @@ class MemoryManager:
         old_dir = Path(self._manifest[old_name]["path"])
         new_dir = self._get_system_dir(new_name)
         
+        # Guard against shutil.move nesting: if new_dir already exists on disk,
+        # shutil.move(src, dst) will move src **inside** dst instead of
+        # replacing it — producing the dreaded nested-dir layout (e.g. B/A).
+        if new_dir.exists():
+            if new_dir.is_dir() and any(new_dir.iterdir()):
+                raise ValueError(
+                    f"Target directory already exists and is non-empty: {new_dir}\n"
+                    f"This would cause nesting. Please delete or move '{new_dir}' first."
+                )
+            # Empty dir — safe to remove so shutil.move can create it fresh
+            try:
+                new_dir.rmdir()
+            except OSError:
+                pass
+        
         # Move directory (with retry for Windows file locks)
         max_retries = 3
         for attempt in range(max_retries):
@@ -471,12 +486,12 @@ Type 'yes' to confirm deletion: """
              delete_sources: bool = False) -> bool:
         """
         Merge multiple memory systems into a new one.
-        
+
         Args:
             source_names: List of source memory system names
             new_name: Name for the new merged memory system
             delete_sources: If True, delete source systems after merge
-            
+
         Returns:
             True if merged successfully
         """
@@ -500,24 +515,52 @@ Type 'yes' to confirm deletion: """
         
         new_store = self.get_store(new_name)
         
-        # Merge documents from all sources
+        # Actually copy documents from each source to the target
         total_docs = 0
         for name in source_names:
             source_store = self.get_store(name)
-            # Get all documents (simple approach: search with large top_k)
-            # Note: ChromaDB doesn't have a direct "get all" method,
-            # so we use a query that matches everything
+            
             try:
-                # Query for documents - this is a workaround
-                # In practice, you'd iterate through your own documents
                 count = source_store.count()
-                total_docs += count
                 
-                if count > 0:
-                    # Get documents using where filter on source_type
-                    # This requires iterating through all possible source types
-                    # For now, we'll do a simple merge by tracking paths
-                    pass
+                if count == 0:
+                    continue
+                
+                # Get ALL documents from source using ChromaDB's get() API
+                # ChromaDB returns up to 10,000 documents by default; paginate if needed
+                all_ids, all_docs, all_metadatas = [], [], []
+                
+                offset = 0
+                batch_size = 10000  # ChromaDB's default limit
+                
+                while offset < count:
+                    result = source_store._collection.get(
+                        limit=batch_size,
+                        offset=offset,
+                        include=["documents", "metadatas"],
+                    )
+                    
+                    if not result["ids"]:
+                        break
+                    
+                    all_ids.extend(result["ids"])
+                    all_docs.extend(result["documents"])
+                    all_metadatas.extend(result["metadatas"])
+                    
+                    offset += len(result["ids"])
+                    if len(result["ids"]) < batch_size:
+                        break
+                
+                total_docs += len(all_ids)
+                
+                # Upsert into target collection
+                if all_ids:
+                    new_store._collection.upsert(
+                        ids=all_ids,
+                        documents=all_docs,
+                        metadatas=all_metadatas,
+                    )
+                    
             except Exception as e:
                 print(f"Warning: Could not read from '{name}': {e}")
         
