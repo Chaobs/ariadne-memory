@@ -109,16 +109,32 @@ class VectorStore:
 
     @staticmethod
     def _wipe_chroma_files(persist_dir: str) -> bool:
-        """Remove all ChromaDB persistence files so PersistentClient can start fresh."""
+        """Remove **all** ChromaDB persisted content so PersistentClient can start fresh.
+
+        ChromaDB's PersistentClient writes not just ``chroma.sqlite3`` but also
+        HNSW index binaries in subdirectories (e.g. ``chroma-embeddings-*``).
+        A corruption in any of these causes "Error loading hnsw index".  The
+        only reliable recovery is to wipe **everything** inside the persist dir.
+        """
         dir_path = Path(persist_dir)
+        if not dir_path.exists() or not dir_path.is_dir():
+            return False
+
         removed = False
-        for pattern in ("chroma.sqlite3", "*.sqlite3-journal", "*.sqlite3-wal"):
-            for f in dir_path.glob(pattern):
-                try:
-                    f.unlink(missing_ok=True)
-                    removed = True
-                except OSError:
-                    pass
+        for item in list(dir_path.iterdir()):
+            try:
+                if item.is_file():
+                    item.unlink(missing_ok=True)
+                elif item.is_dir():
+                    shutil.rmtree(item, ignore_errors=True)
+                removed = True
+            except OSError:
+                pass
+
+        # Recreate the (now-empty) directory so PersistentClient has a target
+        if removed and not dir_path.exists():
+            dir_path.mkdir(parents=True, exist_ok=True)
+
         return removed
 
     def add(self, documents: List[Document]) -> None:
