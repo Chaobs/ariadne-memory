@@ -132,6 +132,54 @@ class MemoryManager:
         safe_name = "".join(c if c.isalnum() or c in "_- " else "_" for c in name)
         return self.base_dir / safe_name
     
+    @staticmethod
+    def _safe_collection_name(name: str) -> str:
+        """Convert a user-facing memory system name to a ChromaDB-safe collection name.
+
+        ChromaDB requires collection names to match:
+        ``[a-zA-Z0-9._-]{3,512}``
+        (3–512 chars, starting/ending with alphanumeric, only ``.``, ``_``, ``-``
+        as special characters).
+
+        This method encodes non-ASCII characters (e.g. Chinese) via URL-encoding,
+        producing a deterministic, reversible ASCII string that satisfies ChromaDB's
+        validation rules.
+
+        Examples:
+            "default"          → "default"
+            "电商-真"          → "e4b889e59586-true"  (hex-encoded UTF-8 bytes)
+        """
+        import re
+
+        # Fast path: already valid ASCII name
+        if re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$', name) and 3 <= len(name) <= 512:
+            return name
+
+        # Encode non-ASCII / invalid chars as hex
+        safe_chars = []
+        for c in name:
+            if c.isalnum():
+                safe_chars.append(c)
+            elif c in '._-':
+                safe_chars.append(c)
+            else:
+                # Hex-encode the UTF-8 byte(s) of this character
+                for b in c.encode('utf-8'):
+                    safe_chars.append(f'{b:02x}')
+
+        result = ''.join(safe_chars)
+
+        # Ensure minimum length of 3 and starts/ends with alphanumeric
+        if len(result) < 3:
+            result = result + ('_' * (3 - len(result)))
+        if not result[0].isalnum():
+            result = '_' + result
+        if not result[-1].isalnum():
+            result = result + '_'
+        
+        # Truncate to max 512
+        return result[:512]
+    
     # === CRUD Operations ===
     
     def create(self, name: str, description: str = "", silent: bool = False) -> bool:
@@ -459,11 +507,12 @@ Type 'yes' to confirm deletion: """
                 self._close_store(name)
 
         path = self._manifest[name]["path"]
+        safe_name = self._safe_collection_name(name)
 
         last_exc = None
         for attempt in range(2):
             try:
-                store = VectorStore(persist_dir=path, collection_name=name)
+                store = VectorStore(persist_dir=path, collection_name=safe_name)
                 store.probe()  # ⚠️ Force lazy HNSW load NOW, not later
                 self._stores[name] = store
                 return store
