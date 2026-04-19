@@ -111,6 +111,10 @@ class MemoryManager:
         # Ensure default system exists
         if self.DEFAULT_COLLECTION not in self._manifest:
             self.create(self.DEFAULT_COLLECTION, "Default memory system", silent=True)
+
+        # Clean up orphaned ChromaDB files left at memories root
+        # (e.g. from old versions or interrupted operations)
+        self._cleanup_orphaned_db_files()
     
     def _save_manifest(self) -> None:
         """Save manifest to disk."""
@@ -412,21 +416,30 @@ Type 'yes' to confirm deletion: """
         return store
     
     def _close_store(self, name: str) -> None:
-        """Close and remove the VectorStore cache for a memory system (releases file locks)."""
+        """Close and remove the VectorStore cache for a memory system.
+
+        **Important design decision (v0.3.4)**: We deliberately do NOT call
+        ``client.close()`` here.  ChromaDB's PersistentClient uses a
+        long-lived SQLite connection that may hold unflushed WAL pages on
+        Windows.  Calling ``close()`` while those pages are still buffered
+        can leave the ``chroma.sqlite3`` file in a corrupted state
+        (SQLITE_NOTADB / code: 26).  Instead we simply drop our Python
+        references and let GC reclaim the handle naturally — SQLite will
+        flush cleanly when the process exits or the next client opens it.
+        """
         import gc
         if name in self._stores:
             try:
                 store = self._stores.pop(name)
-                # Close ChromaDB client to release sqlite3 lock
-                if hasattr(store, '_client'):
-                    client = store._client
-                    # Try ChromaDB's close method first (v0.4+)
-                    if hasattr(client, 'close'):
-                        client.close()
-                        del store._collection
-                    # Always delete references so GC can collect
-                    del store._client
-                    del store._collection
+                # Soft release: drop all internal references so Python's GC
+                # can eventually collect the underlying ChromaDB/SQLite objects.
+                # We intentionally do NOT call client.close() — see docstring.
+                for attr in ("_client", "_collection"):
+                    if hasattr(store, attr):
+                        try:
+                            delattr(store, attr)
+                        except AttributeError:
+                            pass
                 del store  # dereference
                 gc.collect()
             except Exception as e:
@@ -439,16 +452,14 @@ Type 'yes' to confirm deletion: """
 
     def close_all_connections(self) -> None:
         """
-        Public API: Close ALL database connections and release file locks.
-        
-        Call this before any file-system operations (delete, rename, etc.)
-        to ensure ChromaDB releases its sqlite3 handles on Windows.
+        Public API: Drop all cached VectorStore references to release memory.
+
+        This is a *soft* close — it does **not** call ``client.close()`` on
+        ChromaDB's PersistentClient (see ``_close_store`` docstring for why).
+        Call this before delete/rename operations to free Python-level
+        references, but do not rely on it for immediate filesystem access.
         """
-        import gc
         self._close_all_stores()
-        # Extra GC passes to ensure Python objects are truly collected
-        for _ in range(3):
-            gc.collect()
     
     def get_default_store(self) -> VectorStore:
         """Get the default VectorStore."""
@@ -543,6 +554,24 @@ Type 'yes' to confirm deletion: """
         return self.merge(source_names, new_name, delete_sources=True)
     
     # === Utility ===
+    
+    def _cleanup_orphaned_db_files(self) -> None:
+        """Remove orphaned ``chroma.sqlite3`` files at the memories base directory.
+
+        Each memory system lives in its **own** sub-directory (e.g.
+        ``.ariadne/memories/default/chroma.sqlite3``).  A ``chroma.sqlite3``
+        file directly under the base ``memories/`` dir is a leftover from an
+        old version or a crashed operation and can cause "file is not a database"
+        errors (SQLITE_NOTADB, code 26).
+        """
+        for pattern in ("chroma.sqlite3", "*.sqlite3-journal", "*.sqlite3-wal"):
+            for f in self.base_dir.glob(pattern):
+                try:
+                    size_mb = f.stat().st_size / (1024 * 1024)
+                    f.unlink(missing_ok=True)
+                    print(f"Cleaned up orphaned DB: {f.name} ({size_mb:.1f} MB)")
+                except OSError as e:
+                    print(f"Warning: Could not remove orphaned DB {f}: {e}")
     
     def clear(self, name: str) -> bool:
         """Clear all documents from a memory system."""

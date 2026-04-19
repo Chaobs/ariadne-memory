@@ -8,6 +8,7 @@ module needs to change.
 """
 
 import os
+import shutil
 import hashlib
 from pathlib import Path
 from typing import List, Tuple, Optional
@@ -16,6 +17,26 @@ import chromadb
 from chromadb.config import Settings as ChromaSettings
 
 from ariadne.ingest.base import Document, SourceType
+
+
+def _is_db_corruption_error(exc: Exception) -> bool:
+    """Check if an exception indicates a corrupted/invalid SQLite database.
+
+    ChromaDB wraps SQLite errors in various ways. Common patterns:
+    - ``code: 26`` → SQLITE_NOTADB (file is not a database)
+    - ``database disk image is malformed`` → SQLITE_CORRUPT
+    - ``file is encrypted or is not a database`` → legacy format mismatch
+    """
+    msg = str(exc).lower()
+    return any(pattern in msg for pattern in [
+        "file is not a database",
+        "database disk image is malformed",
+        "file is encrypted",
+        "not a valid sqlite db",
+        "code: 26",
+        "code:11",   # SQLITE_CORRUPT
+        "malformed",
+    ])
 
 
 class VectorStore:
@@ -57,15 +78,39 @@ class VectorStore:
         self.collection_name = collection_name or self.DEFAULT_COLLECTION
         Path(persist_dir).mkdir(parents=True, exist_ok=True)
 
-        self._client = chromadb.PersistentClient(
-            path=persist_dir,
-            settings=ChromaSettings(anonymized_telemetry=False),
-        )
+        # Try normal initialization; if DB is corrupted, recover automatically
+        last_exc = None
+        for attempt in range(2):
+            try:
+                self._client = chromadb.PersistentClient(
+                    path=persist_dir,
+                    settings=ChromaSettings(anonymized_telemetry=False),
+                )
+                self._collection = self._client.get_or_create_collection(
+                    name=self.collection_name,
+                    metadata={"description": f"Ariadne memory: {self.collection_name}"},
+                )
+                return  # Success
+            except Exception as exc:
+                last_exc = exc
+                if attempt == 0 and _is_db_corruption_error(exc) and self._wipe_chroma_files(persist_dir):
+                    # Corrupted DB wiped; retry once with fresh DB
+                    continue
+                raise  # Non-corruption error or recovery failed
 
-        self._collection = self._client.get_or_create_collection(
-            name=self.collection_name,
-            metadata={"description": f"Ariadne memory: {self.collection_name}"},
-        )
+    @staticmethod
+    def _wipe_chroma_files(persist_dir: str) -> bool:
+        """Remove all ChromaDB persistence files so PersistentClient can start fresh."""
+        dir_path = Path(persist_dir)
+        removed = False
+        for pattern in ("chroma.sqlite3", "*.sqlite3-journal", "*.sqlite3-wal"):
+            for f in dir_path.glob(pattern):
+                try:
+                    f.unlink(missing_ok=True)
+                    removed = True
+                except OSError:
+                    pass
+        return removed
 
     def add(self, documents: List[Document]) -> None:
         """
