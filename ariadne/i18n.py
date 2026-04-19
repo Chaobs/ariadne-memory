@@ -1,9 +1,10 @@
 """
 Internationalization (i18n) support for Ariadne.
 
-Supports 7 languages:
+Supports 8 languages:
   - zh_CN  Simplified Chinese
   - zh_TW  Traditional Chinese
+  - ja     Japanese
   - en     English
   - fr     French
   - es     Spanish
@@ -53,6 +54,7 @@ __all__ = [
 AVAILABLE_LOCALES: list[tuple[str, str]] = [
     ("zh_CN", "简体中文"),
     ("zh_TW", "繁體中文"),
+    ("ja",    "日本語"),
     ("en",    "English"),
     ("fr",    "Français"),
     ("es",    "Español"),

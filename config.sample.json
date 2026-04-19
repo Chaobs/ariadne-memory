@@ -1,6 +1,7 @@
 {
   "_comment": "Ariadne Configuration File - Copy to config.json and fill in your values",
-  
+  "_version": "0.3.0",
+
   "llm": {
     "provider": "deepseek",
     "model": "deepseek-chat",
@@ -10,28 +11,98 @@
     "max_tokens": 2048,
     "timeout": 60
   },
-  
+
   "chroma": {
     "persist_directory": ".ariadne/chroma",
     "collection_name": "ariadne_memory"
   },
-  
+
   "ingest": {
     "chunk_size": 500,
     "chunk_overlap": 50,
     "batch_size": 100,
     "use_semantic_chunking": false
   },
-  
-  "rerank": {
-    "enabled": false,
-    "provider": "deepseek",
-    "initial_top_k": 20,
-    "rerank_top_k": 5
+
+  "locale": {
+    "language": "auto",
+    "fallback": "en",
+    "output_language": null
   },
-  
+
+  "advanced": {
+    "enable_reranker": false,
+    "enable_graph": true,
+    "enable_summary": true,
+    "reranker_top_k": 5,
+    "initial_top_k": 20
+  },
+
+  "export": {
+    "default_format": "markdown",
+    "include_metadata": true,
+    "include_graph": true
+  },
+
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+
+  "_llm_providers_examples": {
+    "deepseek": {
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxx",
+      "base_url": "https://api.deepseek.com"
+    },
+    "openai": {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxx",
+      "base_url": null
+    },
+    "anthropic": {
+      "provider": "anthropic",
+      "model": "claude-3-5-sonnet-20241022",
+      "api_key": "sk-ant-xxxxxxxxxxxxxxxxxxxxxxxx",
+      "base_url": "https://api.anthropic.com"
+    },
+    "qwen": {
+      "provider": "qwen",
+      "model": "qwen-plus",
+      "api_key": "YOUR_QWEN_API_KEY",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    "gemini": {
+      "provider": "gemini",
+      "model": "gemini-1.5-flash",
+      "api_key": "YOUR_GEMINI_API_KEY",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta"
+    },
+    "grok": {
+      "provider": "grok",
+      "model": "grok-2",
+      "api_key": "YOUR_XAI_API_KEY",
+      "base_url": "https://api.x.ai/v1"
+    },
+    "kimi": {
+      "provider": "kimi",
+      "model": "moonshot-v1-8k",
+      "api_key": "YOUR_KIMI_API_KEY",
+      "base_url": "https://api.moonshot.cn/v1"
+    },
+    "minimax": {
+      "provider": "minimax",
+      "model": "abab5.5-chat",
+      "api_key": "YOUR_MINIMAX_API_KEY",
+      "base_url": "https://api.minimax.chat/v1"
+    },
+    "glm": {
+      "provider": "glm",
+      "model": "glm-4",
+      "api_key": "YOUR_ZHIPU_API_KEY",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4"
+    }
   }
 }

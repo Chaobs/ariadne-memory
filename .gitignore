@@ -46,3 +46,11 @@ htmlcov/
 
 # mypy
 .mypy_cache/
+
+# Vendored packages (already included in repository)
+vendor/packages/
+# vendor/models/ (uncomment if using Git LFS)
+
+# Personal configuration — DO NOT commit
+config.json
+

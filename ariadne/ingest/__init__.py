@@ -51,6 +51,9 @@ from ariadne.ingest.web import WebIngestor
 from ariadne.ingest.email import EmailIngestor, MBOXIngestor
 from ariadne.ingest.media import VideoIngestor, AudioIngestor
 
+# Binary file handler
+from ariadne.ingest.binary import BinaryIngestor
+
 __all__ = [
     # Base
     "BaseIngestor",
@@ -78,6 +81,8 @@ __all__ = [
     "MBOXIngestor",
     "VideoIngestor",
     "AudioIngestor",
+    # Binary files
+    "BinaryIngestor",
     # Factory function
     "get_ingestor",
 ]
@@ -166,9 +171,5 @@ def get_ingestor(source: str) -> BaseIngestor:
     if ext in EXTENSION_MAP:
         return EXTENSION_MAP[ext]()
 
-    # Check if it's a directory (batch ingest)
-    if path.is_dir():
-        # Return base ingestor for directory traversal
-        return TxtIngestor()
-
-    raise ValueError(f"No ingestor found for source: {source} (extension: {ext})")
+    # Fallback to binary ingestor for unknown types
+    return BinaryIngestor()

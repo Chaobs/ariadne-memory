@@ -1,0 +1,6 @@
+# Git LFS Configuration for Ariadne
+# This file is used by git lfs to track large files
+# Currently we track vendor packages and model caches
+# *.whl
+# *.bin
+# models/**/*

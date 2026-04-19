@@ -23,7 +23,16 @@ Example:
     >>> results = store.search("What did I write about AI?")
 """
 
-__version__ = "0.2.0"
+# Auto-setup vendored dependencies
+from pathlib import Path as _Path
+_vendor_init = _Path(__file__).parent.parent / "vendor" / "__init__.py"
+if _vendor_init.exists():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("vendor", _vendor_init)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+__version__ = "0.3.0"
 __author__ = "Chaobs"
 
 from ariadne.memory import VectorStore
