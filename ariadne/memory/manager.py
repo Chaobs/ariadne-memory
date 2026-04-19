@@ -485,7 +485,8 @@ Type 'yes' to confirm deletion: """
         
         # Create new memory system only if it doesn't already exist
         if not target_exists:
-        self.create(new_name, f"Merged from: {', '.join(source_names)}", silent=True)
+            self.create(new_name, f"Merged from: {', '.join(source_names)}", silent=True)
+        
         new_store = self.get_store(new_name)
         
         # Merge documents from all sources
