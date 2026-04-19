@@ -48,6 +48,48 @@ def _is_db_corruption_error(exc: Exception) -> bool:
     ])
 
 
+def _safe_collection_name(name: str) -> str:
+    """Sanitize a collection name to satisfy ChromaDB's validation rules.
+
+    ChromaDB requires ``[a-zA-Z0-9._-]{3,512}`` (starts/ends alphanumeric).
+    Non-ASCII characters (Chinese, Japanese, emoji, etc.) are hex-encoded
+    as their UTF-8 byte representation.
+
+    Examples:
+        >>> _safe_collection_name("default")
+        'default'
+        >>> _safe_collection_name("电商-真")
+        'e4b889e59586_true'
+    """
+    import re
+
+    # Already valid? Return as-is.
+    if re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$', name) and 3 <= len(name) <= 512:
+        return name
+
+    safe = []
+    for c in name:
+        if c.isalnum():
+            safe.append(c)
+        elif c in '._-':
+            safe.append(c)
+        else:
+            for b in c.encode('utf-8'):
+                safe.append(f'{b:02x}')
+
+    result = ''.join(safe)
+
+    # Pad / trim to meet length constraints
+    if len(result) < 3:
+        result = result + ('_' * (3 - len(result)))
+    if result and not result[0].isalnum():
+        result = '_' + result
+    if result and not result[-1].isalnum():
+        result = result + '_'
+
+    return result[:512] if len(result) > 512 else result
+
+
 class VectorStore:
     """
     ChromaDB-backed vector memory store.
@@ -95,6 +137,8 @@ class VectorStore:
 
         self.persist_dir = persist_dir
         self.collection_name = collection_name or self.DEFAULT_COLLECTION
+        # ChromaDB only accepts [a-zA-Z0-9._-] — encode non-ASCII names
+        self._chroma_collection_name = _safe_collection_name(self.collection_name)
         Path(persist_dir).mkdir(parents=True, exist_ok=True)
 
         # Try normal initialization; if DB is corrupted, recover automatically
@@ -106,7 +150,7 @@ class VectorStore:
                     settings=ChromaSettings(anonymized_telemetry=False),
                 )
                 self._collection = self._client.get_or_create_collection(
-                    name=self.collection_name,
+                    name=self._chroma_collection_name,
                     metadata={"description": f"Ariadne memory: {self.collection_name}"},
                 )
                 return  # Success
@@ -265,8 +309,8 @@ class VectorStore:
 
     def clear(self) -> None:
         """Clear all documents from the store."""
-        self._client.delete_collection(name=self.collection_name)
+        self._client.delete_collection(name=self._chroma_collection_name)
         self._collection = self._client.get_or_create_collection(
-            name=self.collection_name,
+            name=self._chroma_collection_name,
             metadata={"description": f"Ariadne memory: {self.collection_name}"},
         )
