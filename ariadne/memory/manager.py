@@ -95,6 +95,8 @@ class MemoryManager:
         
         self.manifest_path = self.base_dir / "manifest.json"
         self._manifest: Dict[str, dict] = {}
+        # Cache of open VectorStore instances so we can close them before file operations
+        self._stores: Dict[str, "VectorStore"] = {}
         self._load_manifest()
     
     def _load_manifest(self) -> None:
@@ -180,11 +182,26 @@ class MemoryManager:
         if new_name in self._manifest:
             raise ValueError(f"Memory system '{new_name}' already exists")
         
+        # Close VectorStore to release chroma.sqlite3 file lock
+        self._close_store(old_name)
+        
         old_dir = Path(self._manifest[old_name]["path"])
         new_dir = self._get_system_dir(new_name)
         
-        # Move directory
-        shutil.move(str(old_dir), str(new_dir))
+        # Move directory (with retry for Windows file locks)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                shutil.move(str(old_dir), str(new_dir))
+                break
+            except PermissionError as e:
+                import time
+                if attempt < max_retries - 1:
+                    time.sleep(0.5)
+                    # Force garbage collection to release any remaining handles
+                    import gc; gc.collect()
+                else:
+                    raise e
         
         # Update manifest
         del self._manifest[old_name]
@@ -272,16 +289,64 @@ Type 'yes' to confirm deletion: """
         del self._manifest[name]
         self._save_manifest()
         
-        # Delete directory with error handling
-        try:
-            if Path(path).exists():
-                shutil.rmtree(path)
-        except (OSError, PermissionError) as e:
-            print(f"Warning: Could not fully delete directory {path}: {e}")
+        # Close VectorStore to release chroma.sqlite3 file lock
+        self._close_store(name)
+        
+        # Delete directory with retries (Windows file locks need time to release)
+        if Path(path).exists():
+            max_retries = 5
+            last_error = None
+            for attempt in range(max_retries):
+                try:
+                    shutil.rmtree(path)
+                    break
+                except (OSError, PermissionError) as e:
+                    import time, gc
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        time.sleep(0.5 * (attempt + 1))  # Increasing backoff
+                        gc.collect()  # Force GC to release file handles
+                    else:
+                        # Final attempt: try deleting individual files
+                        print(f"Warning: Could not fully delete directory {path}: {last_error}")
+                        try:
+                            self._force_delete_recursive(Path(path))
+                            break
+                        except Exception as e2:
+                            print(f"Error: Force delete also failed for {path}: {e2}")
         
         print(f"Deleted memory system: {name}")
         return True
     
+    @staticmethod
+    def _force_delete_recursive(path: Path) -> None:
+        """Force delete directory by removing files one by one (handles locked files)."""
+        import gc
+        for root, dirs, files in os.walk(path, topdown=False):
+            for f in files:
+                fpath = Path(root) / f
+                try:
+                    fpath.unlink(missing_ok=True)
+                except (OSError, PermissionError):
+                    # Make file writable then try again
+                    try:
+                        import stat
+                        fpath.chmod(stat.S_IWRITE)
+                        fpath.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+            for d in dirs:
+                dpath = Path(root) / d
+                try:
+                    dpath.rmdir()
+                except OSError:
+                    pass
+            gc.collect()
+        try:
+            path.rmdir()
+        except OSError:
+            pass
+
     def list_systems(self) -> List[MemorySystem]:
         """
         List all memory systems.
@@ -337,8 +402,33 @@ Type 'yes' to confirm deletion: """
             # Auto-create if doesn't exist
             self.create(name, silent=True)
         
+        # Return cached store if available
+        if name in self._stores:
+            return self._stores[name]
+        
         path = self._manifest[name]["path"]
-        return VectorStore(persist_dir=path)
+        store = VectorStore(persist_dir=path)
+        self._stores[name] = store
+        return store
+    
+    def _close_store(self, name: str) -> None:
+        """Close and remove the VectorStore cache for a memory system (releases file locks)."""
+        if name in self._stores:
+            try:
+                store = self._stores.pop(name)
+                # Close ChromaDB client to release sqlite3 lock
+                if hasattr(store, '_client'):
+                    del store._client
+                if hasattr(store, '_collection'):
+                    del store._collection
+                del store  # dereference so GC can collect
+            except Exception as e:
+                print(f"Warning: Error closing store for '{name}': {e}")
+    
+    def _close_all_stores(self) -> None:
+        """Close all cached VectorStore instances to release file locks."""
+        for name in list(self._stores.keys()):
+            self._close_store(name)
     
     def get_default_store(self) -> VectorStore:
         """Get the default VectorStore."""
@@ -436,33 +526,57 @@ Type 'yes' to confirm deletion: """
         return True
     
     def export(self, name: str, export_path: str) -> bool:
-        """Export a memory system to a directory."""
+        """Export a memory system to a directory.
+
+        If export_path is a directory, a subfolder named after
+        the current memory system is created inside it.
+        """
         if name not in self._manifest:
             raise ValueError(f"Memory system '{name}' not found")
         
-        source_path = self._manifest[name]["path"]
+        source_path = Path(self._manifest[name]["path"])
         dest_path = Path(export_path)
-        
-        shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+
+        # If dest_path already exists and is a directory (user selected folder),
+        # create subfolder with the memory system's actual directory name
+        if dest_path.exists() and dest_path.is_dir():
+            dest_path = dest_path / source_path.name
+
+        shutil.copytree(str(source_path), str(dest_path), dirs_exist_ok=True)
         print(f"Exported '{name}' to {dest_path}")
         return True
     
     def import_memory(self, source_path: str, name: str) -> bool:
-        """Import a memory system from a directory."""
-        source = Path(source_path)
+        """Import a memory system from a directory.
+
+        If the source is inside the memories base directory (e.g. another
+        exported folder), use ``move`` instead of ``copy`` to avoid
+        file-lock conflicts on Windows.
+        """
+        source = Path(source_path).resolve()
         if not source.exists():
             raise ValueError(f"Source path does not exist: {source_path}")
-        
+
         if name in self._manifest:
             raise ValueError(f"Memory system '{name}' already exists")
-        
+
         dest_path = self._get_system_dir(name)
-        shutil.copytree(source, dest_path)
-        
+
+        # Use move when source is inside the base dir (avoids copy-on-same-device locks)
+        try:
+            if str(source).lower().startswith(str(self.base_dir).lower()):
+                # Source is within our memories tree → move it
+                shutil.move(str(source), str(dest_path))
+            else:
+                # External source → copy
+                shutil.copytree(source, dest_path)
+        except Exception as e:
+            raise ValueError(f"Failed to import from {source_path}: {e}") from e
+
         ms = MemorySystem(name=name, path=str(dest_path))
         self._manifest[name] = ms.to_dict()
         self._save_manifest()
-        
+
         print(f"Imported memory system from {source_path} as '{name}'")
         return True
 

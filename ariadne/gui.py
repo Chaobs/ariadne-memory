@@ -18,7 +18,6 @@ import threading
 import webbrowser
 from pathlib import Path
 from typing import List, Optional
-import tempfile
 
 from ariadne import __version__
 from ariadne.memory import MemoryManager, get_manager
@@ -663,14 +662,18 @@ class AriadneGUI:
         self.summary_search_entry = ttk.Entry(summary_group)
         self.summary_search_entry.pack(fill=tk.X, pady=5)
         
-        ttk.Label(summary_group, text=get_label("output_lang")).pack(anchor=tk.W)
-        self.output_lang_combo = ttk.Combobox(summary_group, values=[code for code, _ in available_locales()],
+        # Language selector + Summarize button on the SAME row
+        lang_btn_row = ttk.Frame(summary_group)
+        lang_btn_row.pack(fill=tk.X, pady=5)
+
+        ttk.Label(lang_btn_row, text=get_label("output_lang")).pack(side=tk.LEFT)
+        self.output_lang_combo = ttk.Combobox(lang_btn_row, values=[code for code, _ in available_locales()],
                                              state="readonly", width=15)
         self.output_lang_combo.set(self.config.get_output_language())
-        self.output_lang_combo.pack(anchor=tk.W, pady=5)
-        
-        ttk.Button(summary_group, text=get_label("summarize_btn"), 
-                  command=self._do_summary).pack(pady=5)
+        self.output_lang_combo.pack(side=tk.LEFT, padx=10)
+
+        ttk.Button(lang_btn_row, text=get_label("summarize_btn"),
+                  command=self._do_summary).pack(side=tk.LEFT, padx=10)
         
         self.summary_text = tk.Text(summary_group, wrap=tk.WORD, height=10, font=("Consolas", 9))
         self.summary_text.pack(fill=tk.BOTH, expand=True, pady=5)
@@ -794,7 +797,17 @@ class AriadneGUI:
                 messagebox.showerror("Error", str(e))
 
     def _export_memory(self):
-        """Export current memory system to a directory."""
+        """Export current memory system to a directory with optional rename."""
+        # Ask for export name (default to current memory system name)
+        from tkinter.simpledialog import askstring
+        export_name = askstring(
+            "Export Memory System",
+            "Enter name for exported folder:",
+            initialvalue=self.current_system,
+        )
+        if not export_name:
+            return
+
         output_path = filedialog.askdirectory(
             title=f"Export memory system: {self.current_system}",
             mustexist=False,
@@ -803,7 +816,7 @@ class AriadneGUI:
             return
 
         try:
-            path = self.manager.export(self.current_system, output_path)
+            path = self.manager.export(self.current_system, str(Path(output_path) / export_name))
             messagebox.showinfo(
                 "Export Complete",
                 f"Exported '{self.current_system}' to:\n{path}\n\n"
@@ -1077,17 +1090,20 @@ class AriadneGUI:
     
     def _do_export(self):
         export_format = self.export_format_var.get()
+        # Map internal format name to file extension
+        ext_map = {"markdown": ".md", "html": ".html", "docx": ".docx"}
+        default_ext = ext_map.get(export_format, f".{export_format}")
         output_path = filedialog.asksaveasfilename(
-            defaultextension=f".{export_format}",
-            filetypes=[(export_format.upper(), f"*.{export_format}")]
+            defaultextension=default_ext,
+            filetypes=[(export_format.upper(), f"*{default_ext}")]
         )
         
         if not output_path:
             return
         
         try:
-            # Create a temporary graph storage for demo
-            graph = GraphStorage(db_path=str(Path(tempfile.gettempdir()) / "ariadne_temp.db"))
+            # Use the actual project graph database
+            graph = GraphStorage()
             exporter = Exporter(graph=graph, config=self.config)
             
             path = exporter.export(
@@ -1104,8 +1120,8 @@ class AriadneGUI:
     
     def _view_graph(self):
         try:
-            # Create HTML visualization
-            graph = GraphStorage(db_path=str(Path(tempfile.gettempdir()) / "ariadne_temp.db"))
+            # Use the actual project graph database (not a temp one)
+            graph = GraphStorage()
             visualizer = GraphVisualizer(graph, self.config)
             
             html = visualizer.to_html(title=f"Knowledge Graph - {self.current_system}")
