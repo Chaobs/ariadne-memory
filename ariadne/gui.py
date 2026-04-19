@@ -15,6 +15,7 @@ Run with: python -m ariadne.gui
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 import threading
+import re
 import tempfile
 import webbrowser
 from pathlib import Path
@@ -300,6 +301,37 @@ class LLMConfigDialog(tk.Toplevel):
         self.destroy()
 
 
+# ======================================================================
+# Validation helpers
+# ======================================================================
+
+CHROMA_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$')
+CHROMA_NAME_HINT = (
+    "System name must be 3-512 characters, containing only English letters,\n"
+    "numbers, dots (.), underscores (_), and hyphens (-).\n"
+    "Must start and end with a letter or number.\n\n"
+    "Examples: my_notes, research-data, v2.0, test_01"
+)
+
+
+def validate_system_name(name: str) -> tuple[bool, str]:
+    """Validate a memory system name against ChromaDB's collection name rules.
+
+    Returns:
+        (is_valid, error_message_or_empty_string)
+    """
+    name = name.strip()
+    if not name:
+        return False, "Name cannot be empty."
+    if len(name) < 3:
+        return False, f"Name too short ({len(name)} chars). Minimum is 3 characters."
+    if len(name) > 512:
+        return False, f"Name too long ({len(name)} chars). Maximum is 512 characters."
+    if not CHROMA_NAME_PATTERN.match(name):
+        return False, f"Invalid characters in name:\n\n{CHROMA_NAME_HINT}"
+    return True, ""
+
+
 class MemorySystemDialog(tk.Toplevel):
     """Dialog for memory system operations."""
     
@@ -324,18 +356,30 @@ class MemorySystemDialog(tk.Toplevel):
         
         ttk.Label(frame, text="Name:").grid(row=0, column=0, sticky=tk.W, pady=5)
         self.name_entry = ttk.Entry(frame, width=30)
-        self.name_entry.grid(row=0, column=1, pady=5)
+        self.name_entry.grid(row=0, column=1, pady=5, sticky=tk.W)
         
+        # Hint label showing naming rules
+        hint = ttk.Label(
+            frame,
+            text="Letters, numbers, . _ - only (3-512 chars)",
+            foreground="gray",
+            font=("Arial", 8),
+        )
+        hint.grid(row=1, column=0, columnspan=2, sticky=tk.W)
+
         if self.operation == "rename":
             self.name_entry.insert(0, self.current_name)
-        
-        if self.operation == "create":
-            ttk.Label(frame, text="Description:").grid(row=1, column=0, sticky=tk.W, pady=5)
+            row_offset = 2
+        else:
+            row_offset = 2
+            # Description only for create
+            ttk.Label(frame, text="Description:").grid(row=row_offset, column=0, sticky=tk.W, pady=5)
             self.desc_entry = ttk.Entry(frame, width=30)
-            self.desc_entry.grid(row=1, column=1, pady=5)
+            self.desc_entry.grid(row=row_offset, column=1, pady=5, sticky=tk.W)
+            row_offset += 1
         
         btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=2, column=0, columnspan=2, pady=20)
+        btn_frame.grid(row=row_offset + 1, column=0, columnspan=2, pady=15)
         
         ttk.Button(btn_frame, text="OK", command=self._on_ok).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Cancel", command=self.destroy).pack(side=tk.LEFT)
@@ -348,17 +392,20 @@ class MemorySystemDialog(tk.Toplevel):
     
     def _on_ok(self):
         name = self.name_entry.get().strip()
-        if not name:
-            messagebox.showwarning("Error", "Name cannot be empty")
+
+        # Validate against ChromaDB naming rules BEFORE sending to backend
+        valid, msg = validate_system_name(name)
+        if not valid:
+            messagebox.showwarning("Invalid Name", msg)
             return
-        
+
         try:
             if self.operation == "create":
                 desc = self.desc_entry.get().strip() if hasattr(self, 'desc_entry') else ""
                 self.manager.create(name, desc)
             elif self.operation == "rename":
                 self.manager.rename(self.current_name, name)
-            
+
             self.result = name
             self.destroy()
         except Exception as e:
@@ -394,6 +441,14 @@ class MergeDialog(tk.Toplevel):
         ttk.Label(frame, text="New System Name:").grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
         self.name_entry = ttk.Entry(frame, width=30)
         self.name_entry.grid(row=0, column=1, sticky=tk.W, pady=(0, 5))
+
+        name_hint = ttk.Label(
+            frame,
+            text="Letters, numbers, . _ - only (3-512 chars)",
+            foreground="gray",
+            font=("Arial", 8),
+        )
+        name_hint.grid(row=1, column=0, columnspan=3, sticky=tk.W)
 
         # --- Row 1: Checkbox list (scrollable) ---
         ttk.Label(frame, text="Select systems to merge:").grid(
@@ -500,8 +555,11 @@ class MergeDialog(tk.Toplevel):
 
     def _on_merge(self):
         new_name = self.name_entry.get().strip()
-        if not new_name:
-            messagebox.showwarning("Error", "Name cannot be empty")
+
+        # Validate against ChromaDB naming rules
+        valid, msg = validate_system_name(new_name)
+        if not valid:
+            messagebox.showwarning("Invalid Name", msg)
             return
 
         selected = self._get_selected_names()
@@ -1096,10 +1154,16 @@ class AriadneGUI:
         from tkinter.simpledialog import askstring
         name = askstring(
             "Import Memory System",
-            "Enter name for imported memory system:",
+            "Enter name for imported memory system\n(Letters, numbers, . _ - only):",
             initialvalue=Path(source_path).name,
         )
         if not name:
+            return
+
+        # Validate imported system name
+        valid, msg = validate_system_name(name)
+        if not valid:
+            messagebox.showwarning("Invalid Name", msg)
             return
 
         try:
