@@ -3,6 +3,8 @@ Knowledge Graph storage using NetworkX and SQLite.
 
 Provides persistent storage for entities and relations,
 with graph analysis capabilities via NetworkX.
+
+Database stored under project root: .ariadne/knowledge_graph.db
 """
 
 import networkx as nx
@@ -13,6 +15,9 @@ import json
 import logging
 
 from ariadne.graph.models import Entity, Relation, EntityType, RelationType, GraphDocument
+
+# Use project-local path for knowledge graph DB
+from ariadne.paths import GRAPH_DB_PATH as _DEFAULT_GRAPH_DB
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +31,7 @@ class GraphStorage:
     - SQLite: Durable persistence
     
     Example:
-        storage = GraphStorage("data/graph.db")
+        storage = GraphStorage()
         storage.add_entity(entity)
         storage.add_relation(relation)
         neighbors = storage.get_neighbors("entity_id")
@@ -34,17 +39,17 @@ class GraphStorage:
     
     def __init__(
         self,
-        db_path: str = ".ariadne/knowledge_graph.db",
+        db_path: str = "",  # Empty means use default from paths
         load_existing: bool = True,
     ):
         """
         Initialize the graph storage.
         
         Args:
-            db_path: Path to SQLite database file.
+            db_path: Path to SQLite database file. Defaults to .ariadne/knowledge_graph.db.
             load_existing: Whether to load existing graph on startup.
         """
-        self.db_path = db_path
+        self.db_path = db_path or str(_DEFAULT_GRAPH_DB)
         self._ensure_db_dir()
         
         # In-memory graph for fast operations

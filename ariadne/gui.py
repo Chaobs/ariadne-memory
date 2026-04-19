@@ -483,6 +483,9 @@ class AriadneGUI:
         ttk.Button(toolbar, text=get_label("rename"), command=self._rename_memory).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text=get_label("delete"), command=self._delete_memory).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text=get_label("merge"), command=self._merge_memory).pack(side=tk.LEFT, padx=2)
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=5)
+        ttk.Button(toolbar, text="Export", command=self._export_memory).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Import", command=self._import_memory).pack(side=tk.LEFT, padx=2)
         
         # Notebook for tabs
         notebook = ttk.Notebook(self.root)
@@ -789,8 +792,54 @@ class AriadneGUI:
                 messagebox.showinfo("Success", "Memory system cleared")
             except Exception as e:
                 messagebox.showerror("Error", str(e))
-    
-    # === File Operations ===
+
+    def _export_memory(self):
+        """Export current memory system to a directory."""
+        output_path = filedialog.askdirectory(
+            title=f"Export memory system: {self.current_system}",
+            mustexist=False,
+        )
+        if not output_path:
+            return
+
+        try:
+            path = self.manager.export(self.current_system, output_path)
+            messagebox.showinfo(
+                "Export Complete",
+                f"Exported '{self.current_system}' to:\n{path}\n\n"
+                f"You can share this folder or import it later."
+            )
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+
+    def _import_memory(self):
+        """Import a memory system from an exported directory."""
+        source_path = filedialog.askdirectory(
+            title="Select memory system directory to import",
+        )
+        if not source_path:
+            return
+
+        # Ask for new name
+        from tkinter.simpledialog import askstring
+        name = askstring(
+            "Import Memory System",
+            "Enter name for imported memory system:",
+            initialvalue=Path(source_path).name,
+        )
+        if not name:
+            return
+
+        try:
+            self.manager.import_memory(source_path, name)
+            self._update_memory_list()
+            self._update_stats()
+            messagebox.showinfo(
+                "Import Complete",
+                f"Imported as memory system: {name}"
+            )
+        except (ValueError, FileExistsError) as e:
+            messagebox.showerror("Import Error", str(e))
     
     def _add_files(self):
         files = filedialog.askopenfilenames(
@@ -1020,8 +1069,9 @@ class AriadneGUI:
                 self.root.after(0, lambda t=output: self.summary_text.insert(tk.END, t))
                 
             except Exception as e:
+                err_msg = str(e)
                 self.root.after(0, lambda: self.summary_text.delete(1.0, tk.END))
-                self.root.after(0, lambda: self.summary_text.insert(tk.END, f"Error: {e}"))
+                self.root.after(0, lambda m=err_msg: self.summary_text.insert(tk.END, f"Error: {m}"))
         
         threading.Thread(target=worker, daemon=True).start()
     

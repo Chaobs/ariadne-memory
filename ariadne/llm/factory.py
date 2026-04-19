@@ -164,7 +164,7 @@ class ConfigManager:
             "max_tokens": 2048,
         },
         "chroma": {
-            "persist_directory": ".ariadne/chroma",
+            "persist_directory": "",  # Empty = use project-local default
         },
         "ingest": {
             "chunk_size": 500,

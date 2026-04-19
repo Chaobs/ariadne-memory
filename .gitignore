@@ -51,6 +51,8 @@ htmlcov/
 vendor/packages/
 # vendor/models/ (uncomment if using Git LFS)
 
-# Personal configuration — DO NOT commit
+# Personal configuration and local data — DO NOT commit
 config.json
+.ariadne/
+# (Keep config.sample.json as template)
 

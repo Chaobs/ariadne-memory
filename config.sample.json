@@ -13,7 +13,7 @@
   },
 
   "chroma": {
-    "persist_directory": ".ariadne/chroma",
+    "persist_directory": "",
     "collection_name": "ariadne_memory"
   },
 

@@ -6,6 +6,8 @@ Supports:
 - CRUD operations: create, rename, move, delete, list
 - Merge multiple memory systems into a new one
 - Each memory system is a separate ChromaDB collection
+
+All data stored under project root: .ariadne/memories/
 """
 
 import os
@@ -14,6 +16,9 @@ import shutil
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
+
+# Use project-local paths instead of user home directory
+from ariadne.paths import MEMORIES_DIR
 
 from ariadne.memory.store import VectorStore
 
@@ -72,10 +77,10 @@ class MemoryManager:
         
         Args:
             base_dir: Base directory for all memory systems.
-                     Defaults to ~/.ariadne/memories/
+                     Defaults to .ariadne/memories/ under project root.
         """
         if base_dir is None:
-            base_dir = str(Path.home() / ".ariadne" / "memories")
+            base_dir = str(MEMORIES_DIR)
         
         # Robust path handling
         try:

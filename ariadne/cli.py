@@ -228,6 +228,44 @@ def memory_clear(name: str, yes: bool):
         sys.exit(1)
 
 
+@memory.command("export")
+@click.argument("name")
+@click.argument("output_path", type=click.Path())
+def memory_export(name: str, output_path: str):
+    """Export a memory system to a directory (for backup or sharing).
+    
+    Example:
+        ariadne memory export research ./backup/research_memory
+    """
+    manager = get_manager()
+    
+    try:
+        path = manager.export(name, output_path)
+        click.secho(f"[OK] Exported '{name}' to: {path}", fg="green")
+    except ValueError as e:
+        click.secho(f"[ERROR] {e}", fg="red")
+        sys.exit(1)
+
+
+@memory.command("import")
+@click.argument("source_path", type=click.Path(exists=True))
+@click.argument("name")
+def memory_import(source_path: str, name: str):
+    """Import a memory system from a previously exported directory.
+    
+    Example:
+        ariadne memory import ./backup/research_memory imported_research
+    """
+    manager = get_manager()
+    
+    try:
+        manager.import_memory(source_path, name)
+        click.secho(f"[OK] Imported '{source_path}' as: {name}", fg="green")
+    except ValueError as e:
+        click.secho(f"[ERROR] {e}", fg="red")
+        sys.exit(1)
+
+
 # === File Ingestion ===
 
 @main.command()

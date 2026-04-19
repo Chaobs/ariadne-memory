@@ -34,6 +34,7 @@
 | 🔗 **知识图谱** | 自动识别实体与关系，构建跨源知识关联网络 | ✅ |
 | 🤖 **AI 增强** | 支持 DeepSeek / Claude / Qwen / Gemini / Kimi / MiniMax / GLM / Grok 等主流 AI | ✅ |
 | 🧮 **系统合并** | 支持合并多个记忆系统为一，便于知识整合 | ✅ |
+| 💾 **记忆导出/导入** | 支持将记忆系统导出为目录或从目录导入（备份与分享） | ✅ |
 | 📚 **媒体支持** | EPUB/MOBI 电子书、图片 OCR、扫描 PDF、学术文献元数据 | ✅ |
 | 🔌 **MCP Server** | 提供 MCP 工具接口，可接入 Claude Code / WorkBuddy / Cursor | ✅ |
 | 🖥️ **双入口** | CLI 和 GUI 两种界面，支持所有相同功能 | ✅ |
@@ -191,6 +192,8 @@ for doc, score in results:
 | `memory rename` | 重命名记忆系统 | `ariadne memory rename old new` |
 | `memory delete` | 删除记忆系统 | `ariadne memory delete old` |
 | `memory merge` | 合并记忆系统 | `ariadne memory merge a b new` |
+| `memory export` | 导出记忆系统 | `ariadne memory export research ./backup/` |
+| `memory import` | 导入记忆系统 | `ariadne memory import ./backup/ imported` |
 | `config show` | 显示当前配置 | `ariadne config show` |
 | `config set` | 设置配置项 | `ariadne config set llm.provider deepseek` |
 | `config test` | 测试 LLM 连接 | `ariadne config test` |
@@ -207,7 +210,8 @@ ariadne/
 ├── __init__.py              # 公共 API 入口（自动初始化 vendor）
 ├── cli.py                   # 命令行工具
 ├── gui.py                  # Tkinter GUI 图形界面
-├── config.py               # 统一配置系统
+├── config.py               # 统一配置系统（自动迁移 ~/.ariadne → .ariadne/）
+├── paths.py                # 路径管理模块（统一数据目录定位）
 ├── advanced.py             # 高级功能（摘要/可视化/导出）
 ├── i18n.py                 # 多语言国际化支持（8种语言）
 ├── ingest/                 # 摄入模块
@@ -231,7 +235,7 @@ ariadne/
 │   └── media.py          # 视频/音频摄入器
 ├── memory/                # 向量记忆存储层
 │   ├── store.py          # ChromaDB 向量存储实现
-│   └── manager.py        # 多记忆系统管理器
+│   └── manager.py        # 多记忆系统管理器 + 导出/导入
 ├── llm/                   # LLM 统一接口
 │   ├── base.py           # BaseLLM 抽象基类
 │   ├── factory.py       # LLM 工厂 + ConfigManager
@@ -250,15 +254,27 @@ ariadne/
 │   └── prompts.py     # MCP Prompts
 └── locale/               # 国际化翻译文件（8种语言）
 
+.ariadne/                  # 项目本地数据目录（不在 Git 中）
+├── config.json            # 用户配置（API Key 等，不推送）
+├── .env                   # 环境变量（可选）
+├── memories/              # 记忆系统目录
+│   ├── manifest.json     # 记忆系统注册表
+│   └── {name}/           # 每个记忆系统的 ChromaDB 数据
+├── knowledge_graph.db     # 知识图谱 SQLite 数据库
+└── chroma/                # ChromaDB 默认持久化目录
+
 vendor/                    # 第三方库本地化
-├── __init__.py           # 自动初始化脚本
+├── __init__.py           # 自动初始化脚本（HF_HOME / CHROMA_CACHE 重定向）
 ├── packages/             # pip whl 包
-└── models/               # 本地模型缓存（all-MiniLM-L6-v2）
+├── models/               # 本地模型缓存（all-MiniLM-L6-v2）
+└── cache/                # 运行时缓存（Chroma ONNX 等）
 ```
 
 ---
 
 ## 开发路线 / Roadmap
+
+> **当前阶段**：第一阶段 + 第二阶段（核心功能完善中）
 
 ### 第一阶段 MVP ✅ **已完成**
 - [x] 项目骨架与目录结构
@@ -271,54 +287,76 @@ vendor/                    # 第三方库本地化
 - [x] 各摄入器单元测试
 - [x] 批量摄入与进度条支持
 - [x] **Tkinter GUI 原型**（CLI/GUI 双入口）
+- [x] 记忆系统 CRUD 管理
+- [x] 记忆系统导出/导入功能（CLI `memory export` / `memory import`，GUI 工具栏按钮）
+- [x] 数据目录迁移至项目根目录 `.ariadne/`（不再使用 `~/.ariadne`）
+- [x] 第三方库本地化（vendor 目录）+ 模型缓存本地化
 
 ### 第二阶段 LLM 增强 ✅ **已完成**
-- [x] LLM 统一抽象接口（DeepSeek / Claude / Qwen / ChatGPT / Gemini / Grok）
-- [x] `config.json` 配置文件管理
+- [x] LLM 统一抽象接口（DeepSeek / Claude / Qwen / ChatGPT / Gemini / Grok / Kimi / MiniMax / GLM）
+- [x] `config.json` 配置文件管理（项目根目录 `.ariadne/config.json`）
 - [x] LLM 增强语义重排（Reranker）
 - [x] 智能动态分块（SemanticChunker 替代固定长度）
 - [x] 新增 Kimi / MiniMax / GLM 提供商（9个提供商总计）
+- [x] GUI 内 LLM 模型切换功能
+- [x] **智能摘要修复** — 修复 Summarize prompt 中 JSON 示例花括号转义问题
 
 ### 第三阶段 知识图谱 ✅ **已完成**
 - [x] 实体识别 + 关系抽取（LLM API 驱动）
 - [x] NetworkX + SQLite 图数据库
 - [x] 跨源关联查询
 - [x] 知识时间线视图
-- [x] 交互式图谱可视化（HTML/DOT/Mermaid格式）
+- [x] 交互式图谱可视化（HTML/DOT/Mermaid 格式）
+- [ ] 🔨 **知识系统分析比对**（多记忆系统间差异对比、知识覆盖度分析）
 
-### 第四阶段 媒体支持与学术工具 ✅ **已完成**
-- [x] EPUB / MOBI 电子书摄入（ebooklib）
-- [x] 图片摄入（截图、照片等元数据提取）
+### 第四阶段 媒体支持与学术工具 🔄 **部分完成**
+- [x] EPUB 电子书摄入
+- [x] 图片摄入（元数据提取）
 - [x] 图片 / 扫描版 PDF OCR（pytesseract / RapidOCR）
 - [x] 学术文献元数据（BibTeX / RIS）管理
-- [x] 网页链接摄入（抓取标题、正文、元数据）
+- [x] 网页链接摄入（URL 抓取 + 本地 HTML 文件）
 - [x] 电子邮件摄入（EML/MBOX 解析）
-- [x] 视频文件摄入（提取字幕/音频转录/关键帧截图）
-- [x] 音频文件摄入（音乐/播客语音转文字）
+- [x] 视频文件摄入（mp4 等格式元数据+字幕提取）
+- [x] 音频文件摄入（mp3 等格式语音转录）
+- [ ] 🔨 **聊天记录摄取** — QQ、微信、飞书等 IM 对话记录解析
+- [ ] 🔨 **OCR + 视听增强** — 非文字图片/视频调用转述模型（Whisper/视觉LLM）摄入知识
+- [ ] 🔨 **OFD 文件支持** — 国内税务/发票替代 PDF 格式
 
 ### 第五阶段 MCP Server ✅ **已完成**
 - [x] AriadneMCPServer 核心实现（支持 stdio / HTTP 传输）
 - [x] MCP Tools：`ariadne_search` / `ariadne_ingest` / `ariadne_graph_query` / `ariadne_stats`
 - [x] MCP Resources：`collections` / `stats` / `config` / `graph`
 - [x] MCP Prompts：`search` / `ingest` / `graph` / `context` / `compare`
-- [x] Claude Desktop / Cursor 集成配置示例
-- [x] 详细使用文档 (`docs/MCP.md`)
 
 ### v0.3.0 增强版 ✅ **已完成**
-- [x] 第三方库本地化（vendor目录）
+- [x] 第三方库本地化（vendor 目录）
 - [x] 模型缓存本地化（all-MiniLM-L6-v2）
 - [x] 二进制文件处理（提取文件名为知识引用）
-- [x] 扩展 LLM 提供商示例（config.sample.json）
+- [x] 扩展 LLM 提供商示例（config.sample.json 含 9 个模板）
 - [x] 快捷入口脚本（ariadne-cli.bat / ariadne-gui.bat）
-- [x] 日语支持（ja locale）
-- [x] .gitignore 更新（config.json 不推送）
+- [x] 日语支持（ja locale，总计 8 种语言）
+- [x] .gitignore 更新（config.json / .ariadne 不推送）
 
 ### 第六阶段 社区运营与迭代（持续）
-- [x] GitHub 正式发布 v0.2.0
-- [ ] 版本化发布（v0.3.0+）
-- [ ] **PyQt6 GUI 重写**（替代 Tkinter 原型）🔨 进行中
+- [x] GitHub 正式发布 v0.2.0 → v0.3.0
+- [ ] 🔨 **PyQt6 GUI 重写**（现代 UI，替代 Tkinter 原型）⚡ 优先进行中
+- [ ] 🔨 **Wiki 页面与详细使用文档**
+- [ ] 🔨 **Logo 与 Icon 设计**
+- [ ] 🔨 **云备份与联网查询**（记忆系统云端同步 + 实时信息检索增强）
+- [ ] 版本化发布（v0.4.0+）
 - [ ] HackerNews / Reddit 投递
 - [ ] 中文社区传播（掘金 / 知乎 / CSDN）
+
+---
+
+## 图例
+
+| 标记 | 含义 |
+|------|------|
+| ✅ | 已完成 |
+| 🔄 | 部分完成 |
+| 🔨 | 待开发 |
+| ⚡ | 当前优先任务 |
 
 ---
 

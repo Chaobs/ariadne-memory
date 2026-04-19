@@ -10,10 +10,12 @@ Unified configuration management supporting:
 
 Config priority (highest to lowest):
 1. Environment variables
-2. Project-level config (./ariadne.json)
-3. User-level config (~/.ariadne/config.json)
+2. Project-level config (.ariadne/config.json under project root)
+3. User-level config (legacy: ~/.ariadne/config.json, migrated automatically)
 4. System-level config (/etc/ariadne/config.json)
 5. Default values
+
+All data is stored under the project root directory (Ariadne/.ariadne/).
 """
 
 from __future__ import annotations
@@ -27,6 +29,14 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 import platform
 
+# Import centralized path management
+from ariadne.paths import (
+    ARIADNE_DIR, CONFIG_FILE, ENV_FILE,
+    CHROMA_DEFAULT_DIR as _CHROMA_DEFAULT,
+    MEMORIES_DIR,
+    PROJECT_ROOT,
+)
+
 from ariadne.llm.base import LLMProvider, LLMConfig, BaseLLM
 from ariadne.llm.factory import LLMFactory
 
@@ -38,26 +48,29 @@ from ariadne.llm.factory import LLMFactory
 def get_config_paths() -> Dict[str, Optional[Path]]:
     """
     Get all possible config file paths in priority order.
-    
+
     Returns:
         Dict with path names and their Path objects (or None if not found)
     """
+    # Primary: project-local .ariadne/config.json
+    # Legacy: ~/.ariadne/config.json (auto-migrated on first run)
     home = Path.home()
+    legacy_ariadne = home / ".ariadne"
     system = Path("/etc/ariadne") if platform.system() != "Windows" else None
-    
+
     paths = {
-        "project": Path.cwd() / "ariadne.json",
-        "user": home / ".ariadne" / "config.json",
-        "env": home / ".ariadne" / ".env",
+        "project": CONFIG_FILE,  # .ariadne/config.json under project root
+        "user": legacy_ariadne / "config.json",  # legacy user home location
+        "env": ENV_FILE,  # .ariadne/.env under project root
         "system": system / "config.json" if system else None,
     }
-    
+
     return paths
 
 
 def get_default_config_dir() -> Path:
-    """Get the default config directory."""
-    return Path.home() / ".ariadne"
+    """Get the default config directory — now under project root."""
+    return ARIADNE_DIR
 
 
 # ============================================================================
@@ -94,16 +107,26 @@ class LLMConfigData:
 @dataclass
 class ChromaConfigData:
     """ChromaDB configuration data."""
-    persist_directory: str = "~/.ariadne/chroma"
+    persist_directory: str = ""  # Empty means use CHROMA_DEFAULT_DIR from paths
     collection_name: str = "ariadne_memory"
 
+    def _effective_persist_dir(self) -> str:
+        """Return actual persist directory, falling back to project-local path."""
+        return self.persist_directory or str(_CHROMA_DEFAULT)
+
     def to_dict(self) -> dict:
-        return asdict(self)
-    
+        d = asdict(self)
+        d["persist_directory"] = self._effective_persist_dir()
+        return d
+
     @classmethod
     def from_dict(cls, data: dict) -> "ChromaConfigData":
+        pd = data.get("persist_directory", "")
+        # Convert legacy ~/~/.ariadne paths if found
+        if "~/.ariadne" in pd or ".ariadne" in pd and "/" in pd or "\\" in pd:
+            pd = ""  # Reset to use default (project root)
         return cls(
-            persist_directory=data.get("persist_directory", "~/.ariadne/chroma"),
+            persist_directory=pd,
             collection_name=data.get("collection_name", "ariadne_memory"),
         )
 
@@ -226,7 +249,7 @@ class AriadneConfig:
             "max_tokens": 2048,
         },
         "chroma": {
-            "persist_directory": "~/.ariadne/chroma",
+            "persist_directory": str(_CHROMA_DEFAULT),
             "collection_name": "ariadne_memory",
         },
         "ingest": {
@@ -272,9 +295,12 @@ class AriadneConfig:
         Args:
             config_path: Path to a specific config file to load.
         """
-        self.config_dir = get_default_config_dir()
+        self.config_dir = ARIADNE_DIR
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        
+
+        # Auto-migrate from legacy ~/.ariadne location if it exists
+        self._migrate_legacy()
+
         self._config = self._deep_copy(self.DEFAULT_CONFIG)
         self._loaded_sources: List[str] = ["defaults"]
         
@@ -282,6 +308,51 @@ class AriadneConfig:
         if config_path:
             self.load(config_path)
             self._loaded_sources.append(config_path)
+    
+    def _migrate_legacy(self) -> None:
+        """
+        Migrate data from legacy ~/.ariadne location to project root.
+        
+        Copies config.json, .env, and memories/ if they exist in the old path,
+        then renames the old directory to .ariadne_legacy (safe delete).
+        """
+        legacy = Path.home() / ".ariadne"
+        if not legacy.exists():
+            return
+        
+        # Check if already migrated
+        migration_marker = legacy / ".migrated_to_project"
+        if migration_marker.exists():
+            return
+        
+        import shutil
+        moved_any = False
+        
+        # Migrate config.json
+        legacy_config = legacy / "config.json"
+        if legacy_config.exists() and not CONFIG_FILE.exists():
+            shutil.copy2(str(legacy_config), str(CONFIG_FILE))
+            print(f"[Migrated] config.json -> {CONFIG_FILE}")
+            moved_any = True
+        
+        # Migrate .env
+        legacy_env = legacy / ".env"
+        if legacy_env.exists() and not ENV_FILE.exists():
+            shutil.copy2(str(legacy_env), str(ENV_FILE))
+            print(f"[Migrated] .env -> {ENV_FILE}")
+            moved_any = True
+        
+        # Migrate memories directory
+        legacy_memories = legacy / "memories"
+        if legacy_memories.is_dir() and not MEMORIES_DIR.is_dir():
+            shutil.copytree(str(legacy_memories), str(MEMORIES_DIR))
+            print(f"[Migrated] memories/ -> {MEMORIES_DIR}")
+            moved_any = True
+        
+        # Mark as migrated so we don't do it again
+        if moved_any:
+            migration_marker.write_text(f"Migrated to {PROJECT_ROOT}\n")
+            print(f"[Migration complete] Legacy data copied to project root.")
     
     @classmethod
     def auto(cls) -> "AriadneConfig":

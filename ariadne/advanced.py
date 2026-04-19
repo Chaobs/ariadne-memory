@@ -112,17 +112,17 @@ Requirements:
 4. Important keywords (5-10 keywords)
 
 Format your response as JSON:
-{
+{{
     "summary": "A concise 2-3 sentence summary paragraph",
     "topics": ["topic1", "topic2", "topic3"],
     "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
     "insights": [
-        {
+        {{
             "text": "Key insight from the documents",
             "source": "document name or path"
-        }
+        }}
     ]
-}
+}}
 
 Content to summarize:
 {content}
@@ -222,37 +222,70 @@ Content to summarize:
             # Try to extract JSON
             json_str = self._extract_json(content)
             data = json.loads(json_str)
-            
+
+            # Ensure data is a dict (LLM may occasionally return a JSON string)
+            if not isinstance(data, dict):
+                raise json.JSONDecodeError("Expected JSON object", json_str, 0)
+
+            summary = data.get("summary", "")
+            keywords = data.get("keywords", [])
+            topics = data.get("topics", [])
+
+            # Coerce to expected types if LLM returned wrong shapes
+            if not isinstance(summary, str):
+                summary = str(summary)
+            if not isinstance(keywords, list):
+                keywords = []
+            if not isinstance(topics, list):
+                topics = []
+
             return SummaryResult(
-                summary=data.get("summary", ""),
-                keywords=data.get("keywords", []),
-                topics=data.get("topics", []),
+                summary=summary,
+                keywords=keywords,
+                topics=topics,
                 language=language,
                 sources=sources,
             )
-        except json.JSONDecodeError:
-            # Fall back to plain text
+        except (json.JSONDecodeError, ValueError):
+            # Fall back to plain text — strip stray JSON punctuation for readability
+            clean = content.strip().lstrip("{").rstrip("}")
             return SummaryResult(
-                summary=content[:500],
+                summary=clean[:1000],
                 keywords=[],
                 topics=[],
                 language=language,
                 sources=sources,
             )
-    
+
     def _extract_json(self, content: str) -> str:
         """Extract JSON from content, handling markdown code blocks."""
         content = content.strip()
-        
+
+        # Handle ```json ... ``` blocks
         if "```json" in content:
-            parts = content.split("```json")
+            parts = content.split("```json", 1)
             if len(parts) > 1:
                 content = parts[1].split("```")[0]
+        # Handle ``` ... ``` blocks (may have a language tag on the first line)
         elif "```" in content:
-            parts = content.split("```")
+            parts = content.split("```", 1)
             if len(parts) > 1:
-                content = parts[1]
-        
+                inner = parts[1].split("```")[0]
+                # Drop leading language tag line (e.g. "json\n{...}")
+                lines = inner.splitlines()
+                if lines and not lines[0].strip().startswith("{"):
+                    inner = "\n".join(lines[1:])
+                content = inner
+
+        # If no code block found, try to locate the first { ... } in the response
+        stripped = content.strip()
+        if not stripped.startswith("{"):
+            start = stripped.find("{")
+            end = stripped.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                stripped = stripped[start:end + 1]
+            content = stripped
+
         return content.strip()
     
     def _basic_summary(
