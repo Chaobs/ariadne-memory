@@ -53,6 +53,23 @@ vendor/*.whl
 # vendor/models/ (uncomment if using Git LFS)
 vendor/models/hub/
 
+# Web UI frontend (React + Vite)
+ariadne/web/frontend/node_modules/
+ariadne/web/frontend/dist/
+ariadne/web/frontend/dist-ssr/
+ariadne/web/frontend/.env
+ariadne/web/frontend/.env.local
+# But keep the source code
+!ariadne/web/frontend/src/
+!ariadne/web/frontend/public/
+!ariadne/web/frontend/index.html
+!ariadne/web/frontend/package.json
+!ariadne/web/frontend/tsconfig.json
+!ariadne/web/frontend/vite.config.ts
+!ariadne/web/api.py
+!ariadne/web/__init__.py
+!ariadne/web/static/
+
 # Personal configuration and local data — DO NOT commit
 config.json
 .ariadne/

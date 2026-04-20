@@ -106,6 +106,9 @@ app.add_typer(rag_app, name="rag")
 mcp_app = typer.Typer(help="MCP server commands (Model Context Protocol integration).")
 app.add_typer(mcp_app, name="mcp")
 
+web_app = typer.Typer(help="Web UI commands (FastAPI + React frontend).")
+app.add_typer(web_app, name="web")
+
 
 def version_callback(value: bool):
     if value:
@@ -1218,6 +1221,72 @@ def mcp_info():
     console.print(f"\n[bold cyan]Usage[/bold cyan]:")
     console.print(f"  Claude Code:   [dim]claude --mcp ariadne python -m ariadne.cli mcp run[/dim]")
     console.print(f"  HTTP client:   [dim]POST http://127.0.0.1:8765/mcp[/dim]")
+
+
+# ═══════════════════════════════════════════
+# Web UI
+# ═══════════════════════════════════════════
+
+@web_app.command("run", help="Start the web UI server (FastAPI + React frontend).")
+def web_run(
+    host: str = typer.Option("127.0.0.1", "--host", help="Server host"),
+    port: int = typer.Option(8770, "--port", "-p", help="Server port"),
+    open_browser: bool = typer.Option(True, "--no-open", help="Don't open browser automatically"),
+):
+    """Start the Ariadne web UI server."""
+    try:
+        from ariadne.web import run_server
+    except ImportError as e:
+        console.print("[bold red]Web UI dependencies not installed.[/bold red]")
+        console.print(f"[dim]Please run: pip install fastapi uvicorn pydantic[/dim]")
+        console.print(f"[dim]Or: pip install ariadne-memory[web][/dim]")
+        raise typer.Exit(1)
+
+    console.print(Panel(
+        f"[cyan]Ariadne Web UI[/cyan]\n"
+        f"Starting at [bold]http://{host}:{port}[/bold]\n"
+        f"Frontend: [dim]React SPA[/dim]  |  API: [dim]FastAPI[/dim]",
+        title="Web Server",
+        border_style="cyan",
+    ))
+
+    if open_browser:
+        import webbrowser
+        import threading
+        threading.Timer(1.5, lambda: webbrowser.open(f"http://{host}:{port}")).start()
+
+    run_server(host=host, port=port)
+
+
+@web_app.command("info", help="Show web UI status and configuration.")
+def web_info():
+    """Show web UI configuration and status."""
+    try:
+        from ariadne.web import run_server
+        web_available = True
+    except ImportError:
+        web_available = False
+
+    static_dir = Path(__file__).parent / "web" / "static"
+    has_frontend = static_dir.exists()
+
+    console.print(Panel(
+        f"[cyan]Ariadne Web UI[/cyan]\n\n"
+        f"Backend:       [cyan]FastAPI + uvicorn[/cyan]\n"
+        f"Frontend:      [cyan]React SPA[/cyan]\n"
+        f"Static dir:    [dim]{static_dir if has_frontend else 'not found'}[/dim]\n"
+        f"Available:     [{'green' if web_available else 'red'}]{'Yes' if web_available else 'No'}[/]",
+        title="Web UI Info",
+        border_style="cyan",
+    ))
+
+    if not web_available:
+        console.print("\n[yellow]To enable web UI, install:[/yellow]")
+        console.print("[dim]  pip install fastapi uvicorn pydantic[/dim]")
+
+    if not has_frontend:
+        console.print("\n[yellow]Frontend not built yet.[/yellow]")
+        console.print("[dim]  See: ariadne/web/frontend/ for React source[/dim]")
 
 
 # ═══════════════════════════════════════════

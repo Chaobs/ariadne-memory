@@ -39,7 +39,11 @@
 | 💾 **记忆导出/导入** | 支持将记忆系统导出为目录或从目录导入（备份与分享） | ✅ |
 | 📚 **媒体支持** | EPUB/MOBI 电子书、图片 OCR、扫描 PDF、学术文献元数据 | ✅ |
 | 🔌 **MCP Server** | 提供 MCP 工具接口，可接入 Claude Code / WorkBuddy / Cursor | ✅ |
-| 🖥️ **双入口** | CLI（Typer + Rich）和 GUI 两种界面，支持所有相同功能 | ✅ |
+| 🖥️ **双入口** | CLI（Typer + Rich）和 Web UI（React + FastAPI），支持所有相同功能 | ✅ |
+| 🕸️ **Web UI** | 现代 React 单页应用，含语义搜索、记忆管理、D3 图谱、设置 | ✅ |
+| 🕸️ **D3 图谱** | 交互式力导向知识图谱，支持缩放/平移/拖拽 | ✅ |
+| 🌙 **暗色模式** | 亮色/暗色主题切换（保存在 localStorage） | ✅ |
+| 📱 **响应式** | 移动端自适应布局（适配 <768px 和 <480px） | ✅ |
 | 🌍 **多语言** | 支持 8 种语言（中文简繁体、日语、英、法、西、俄、阿） | ✅ |
 | 📝 **智能摘要** | LLM 驱动的多语言摘要生成，支持指定输出语言 | ✅ |
 | 📊 **可视化** | 知识图谱交互式可视化（HTML / DOT / Mermaid） | ✅ |
@@ -134,12 +138,20 @@ pip install -r requirements.txt
 
 **快捷入口（Windows）：**
 ```bash
-# 双击 ariadne-cli.bat 打开命令行
-# 双击 ariadne-gui.bat 打开图形界面
+# 双击 ariadne-cli.bat  打开命令行
+# 双击 ariadne-gui.bat   旧版 Tkinter 界面（已弃用）
+# 双击 ariadne-web.bat   现代 Web UI（推荐）
 ```
 
 **或使用命令行：**
 ```bash
+# 启动 Web UI（推荐）
+ariadne-web.bat              # 默认端口 8770
+ariadne-web.bat 8080          # 自定义端口
+
+# 或通过 Python
+python -m ariadne.cli web run
+
 # 摄入单个文件
 python -m ariadne.cli ingest ./my_notes.md
 
@@ -204,7 +216,8 @@ for doc, score in results:
 | `ingest` | 摄入文件或目录 | `ariadne ingest ./notes.md` |
 | `search` | 语义搜索 | `ariadne search "AI伦理"` |
 | `info` | 查看系统信息 | `ariadne info --stats` |
-| `gui` | 启动图形界面 | `ariadne gui` |
+| `web run` | 启动 Web UI | `ariadne web run --port 8770` |
+| `gui` | 启动图形界面（已弃用） | `ariadne gui` |
 | `memory list` | 列出所有记忆系统 | `ariadne memory list` |
 | `memory create` | 创建新记忆系统 | `ariadne memory create "Research"` |
 | `memory rename` | 重命名记忆系统 | `ariadne memory rename old new` |
@@ -319,6 +332,17 @@ vendor/                    # 第三方库本地化
 - [x] GUI 内 LLM 模型切换功能
 - [x] **智能摘要修复** — 修复 Summarize prompt 中 JSON 示例花括号转义问题
 
+### 第二阶段 Web UI ✅ **已完成**
+- [x] `ariadne web run/info` CLI 命令
+- [x] FastAPI REST API（12+ 端点覆盖全部 CLI 功能）
+- [x] React + Vite + TypeScript SPA（6 个页面：Home/Search/Memory/Ingest/Graph/Settings）
+- [x] Vite 开发服务器配置 API 代理（`/api` → `localhost:8770`）
+- [x] **D3.js 交互式知识图谱** — 力导向图谱，支持缩放/平移/拖拽、节点点击详情
+- [x] **上传进度条** — 文件摄入时实时视觉反馈
+- [x] **暗色/亮色主题切换**（保存在 localStorage）
+- [x] **响应式移动端适配**（<768px / <480px）
+- [x] 快捷入口脚本（ariadne-web.bat）
+
 ### 第三阶段 知识图谱 ✅ **已完成**
 - [x] 实体识别 + 关系抽取（LLM API 驱动）
 - [x] NetworkX + SQLite 图数据库
@@ -359,12 +383,15 @@ vendor/                    # 第三方库本地化
 - [x] .gitignore 更新（config.json / .ariadne 不推送）
 
 ### 第六阶段 社区运营与迭代（持续）
-- [x] GitHub 正式发布 v0.2.0 → v0.3.0
-- [ ] 🔨 **PyQt6 GUI 重写**（现代 UI，替代 Tkinter 原型）⚡ 优先进行中
+- [x] GitHub 正式发布 v0.2.0 → v0.6.1
+- [x] **Web UI（FastAPI + React）** — 现代跨平台界面，替代旧版 Tkinter
+- [ ] 🔨 **实时摄入进度** — SSE 实时上传进度
+- [ ] 🔨 **精美图谱可视化** — D3.js 交互式知识图谱增强（筛选、高亮、导出）
 - [ ] 🔨 **Wiki 页面与详细使用文档**
 - [ ] 🔨 **Logo 与 Icon 设计**
 - [ ] 🔨 **云备份与联网查询**（记忆系统云端同步 + 实时信息检索增强）
-- [ ] 版本化发布（v0.4.0+）
+- [ ] 🔨 **指定目录自动摄入** — 后台监控文件变化，自动摄入知识系统
+- [ ] 版本化发布（v0.7.0+）
 - [ ] HackerNews / Reddit 投递
 - [ ] 中文社区传播（掘金 / 知乎 / CSDN）
 

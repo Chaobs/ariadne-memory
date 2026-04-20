@@ -39,7 +39,11 @@
 | 💾 **Export/Import** | Export/import memory systems for backup and sharing | ✅ |
 | 📚 **Media Support** | EPUB/MOBI, Image OCR, Scanned PDF, Academic metadata | ✅ |
 | 🔌 **MCP Server** | MCP tools interface for Claude Code / WorkBuddy / Cursor | ✅ |
-| 🖥️ **Dual Interface** | CLI (Typer + Rich) and GUI, both with full features | ✅ |
+| 🖥️ **Dual Interface** | CLI (Typer + Rich) + Web UI (React + FastAPI), both with full features | ✅ |
+| 🕸️ **Web UI** | Modern React SPA with semantic search, memory management, D3 graph, settings | ✅ |
+| 🕸️ **D3 Graph** | Interactive force-directed knowledge graph with zoom/pan/drag | ✅ |
+| 🌙 **Dark Mode** | Toggle light/dark theme (stored in localStorage) | ✅ |
+| 📱 **Responsive** | Mobile-friendly layout (adapts to <768px and <480px) | ✅ |
 | 🌍 **Multi-language** | Supports 8 languages (zh_CN/zh_TW/ja/en/fr/es/ru/ar) | ✅ |
 | 📝 **Smart Summarization** | LLM-driven multi-language summarization | ✅ |
 | 📊 **Visualization** | Interactive knowledge graph (HTML / DOT / Mermaid) | ✅ |
@@ -134,12 +138,20 @@ pip install -r requirements.txt
 
 **Windows Shortcuts:**
 ```bash
-# Double-click ariadne-cli.bat for command line
-# Double-click ariadne-gui.bat for GUI
+# Double-click ariadne-cli.bat  — Command line interface
+# Double-click ariadne-gui.bat   — Legacy Tkinter GUI (deprecated)
+# Double-click ariadne-web.bat   — Modern Web UI (recommended)
 ```
 
 **Or use command line:**
 ```bash
+# Start Web UI (recommended)
+ariadne-web.bat              # Default port 8770
+ariadne-web.bat 8080         # Custom port
+
+# Or via Python
+python -m ariadne.cli web run
+
 # Ingest a single file
 python -m ariadne.cli ingest ./my_notes.md
 
@@ -218,6 +230,8 @@ for doc, score in results:
 | `config set-api-key` | Set API key | `ariadne config set-api-key deepseek sk-xxxxx` |
 | `advanced summarize` | Generate summary | `ariadne advanced summarize "AI"` |
 | `advanced graph` | Knowledge graph | `ariadne advanced graph -f dot` |
+| `web run` | Launch web UI | `ariadne web run --port 8770` |
+| `web info` | Web UI status | `ariadne web info` |
 
 ---
 
@@ -275,6 +289,16 @@ ariadne/
 │   ├── hybrid.py           # Hybrid search
 │   ├── reranker.py         # Cross-encoder reranker
 │   └── engine.py           # RAG engine
+├── web/                    # Web UI (React + FastAPI)
+│   ├── api.py              # FastAPI REST API
+│   ├── __init__.py        # Web entry point
+│   └── frontend/           # React + Vite + TypeScript source
+│       ├── src/
+│       │   ├── api/       # API client
+│       │   ├── components/ # Layout component
+│       │   └── pages/      # Home/Search/Memory/Ingest/Graph/Settings
+│       ├── dist/           # Production build output
+│       └── static/         # Deployed static files
 └── locale/                 # i18n translation files (8 languages)
 
 .ariadne/                   # Project local data (not in Git)
@@ -297,9 +321,9 @@ vendor/                     # Third-party packages
 
 ## Roadmap
 
-> **Current Phase**: Phase 1 + Phase 2 (core features enhanced)
+> **Current Phase**: Phase 2 — Web UI Alpha (FastAPI + React) 🔄
 
-### Phase 1 MVP ✅ **Completed**
+### Phase 0 MVP ✅ **Completed**
 - [x] Project skeleton and directory structure
 - [x] 10 document format ingestors (Markdown/Word/PPT/PDF/TXT/Conversation/MindMap/Code/Excel/CSV)
 - [x] ChromaDB vector storage layer
@@ -315,7 +339,7 @@ vendor/                     # Third-party packages
 - [x] Data directory migrated to `.ariadne/` (not `~/.ariadne`)
 - [x] Third-party library localization (vendor directory) + model cache
 
-### Phase 2 LLM Enhancement ✅ **Completed**
+### Phase 1 RAG Pipeline ✅ **Completed**
 - [x] LLM unified interface (DeepSeek / Claude / Qwen / ChatGPT / Gemini / Grok / Kimi / MiniMax / GLM)
 - [x] `config.json` configuration management
 - [x] LLM-enhanced semantic reranking (Reranker)
@@ -324,7 +348,25 @@ vendor/                     # Third-party packages
 - [x] GUI LLM model switching
 - [x] **Smart summarization fix** — Fixed JSON curly brace escaping in Summarize prompt
 
+### Phase 2 Web UI 🔄 **In Progress**
+- [x] `ariadne web run/info` CLI commands
+- [x] FastAPI REST API (12+ endpoints covering all CLI/GUI functionality)
+- [x] React + Vite + TypeScript SPA (6 pages: Home/Search/Memory/Ingest/Graph/Settings)
+- [x] Vite dev server proxy for seamless API integration
+- [ ] 🔨 **Beautiful graph visualization** — D3.js or Cytoscape.js interactive knowledge graph
+- [ ] 🔨 **Real-time ingestion progress** — SSE (Server-Sent Events) for live upload progress
+- [ ] 🔨 **Dark/light theme toggle**
+- [ ] 🔨 **Responsive mobile-friendly layout**
+
 ### Phase 3 Knowledge Graph ✅ **Completed**
+- [x] Entity recognition + relation extraction (LLM API)
+- [x] NetworkX + SQLite graph database
+- [x] Cross-source relationship queries
+- [x] Knowledge timeline view
+- [x] Interactive graph visualization (HTML/DOT/Mermaid)
+- [ ] 🔨 **Knowledge system analysis** — Cross-memory system comparison, coverage analysis
+
+### Phase 4 Media & Academic Tools 🔄 **Partially Complete**
 - [x] Entity recognition + relation extraction (LLM API)
 - [x] NetworkX + SQLite graph database
 - [x] Cross-source relationship queries
@@ -364,12 +406,15 @@ vendor/                     # Third-party packages
 - [x] .gitignore update (config.json / .ariadne not committed)
 
 ### Phase 6 Community & Iteration (Ongoing)
-- [x] GitHub release v0.2.0 → v0.3.0
-- [ ] 🔨 **PyQt6 GUI rewrite** (modern UI, replacing Tkinter prototype) ⚡ Priority
+- [x] GitHub release v0.2.0 → v0.5.0
+- [x] **Web UI (FastAPI + React)** — Modern cross-platform interface, replacing legacy Tkinter
+- [ ] 🔨 **Real-time ingestion progress** — SSE for live upload progress
+- [ ] 🔨 **Beautiful graph visualization** — D3.js or Cytoscape.js interactive knowledge graph
 - [ ] 🔨 **Wiki pages and detailed documentation**
 - [ ] 🔨 **Logo and icon design**
 - [ ] 🔨 **Cloud backup & network query** (memory system cloud sync + real-time info retrieval)
-- [ ] Versioned releases (v0.4.0+)
+- [ ] 🔨 **Auto-ingest from watch directory** — Background file monitoring + auto-ingest
+- [ ] Versioned releases (v0.7.0+)
 - [ ] HackerNews / Reddit posts
 - [ ] Chinese community outreach (掘金 / 知乎 / CSDN)
 

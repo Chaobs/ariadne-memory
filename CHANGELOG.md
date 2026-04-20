@@ -5,6 +5,54 @@ All notable changes to Ariadne will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-04-20
+
+### Added
+
+- **D3.js Interactive Knowledge Graph** — Force-directed graph with zoom/pan/drag
+  - Color-coded entity types (Person/Organization/Location/Concept/Technology/Event)
+  - Node click to show detail panel
+  - Adjustable max nodes (20/50/100/200)
+  - Interactive legend with type colors
+
+- **Theme Toggle** — Dark/Light mode switch (stored in localStorage)
+  - Full dark theme with custom CSS variables
+  - Toggle button in sidebar footer
+
+- **Upload Progress Bar** — Visual feedback during file ingestion
+
+- **Responsive Mobile Layout** — Adapts to screens < 768px and < 480px
+
+- **`ariadne-web.bat`** — New Windows shortcut script to launch Web UI
+  - `ariadne-web.bat` — Default port 8770
+  - `ariadne-web.bat 8080` — Custom port
+
+- **`SCRIPTS.md`** — Documentation for all .bat shortcut scripts
+
+### Changed
+
+- **Graph page** — Replaced static list view with full D3Graph component
+- **Ingest page** — Added animated progress bar during file upload
+- **Settings page** — Theme toggle button visible in sidebar footer
+
+## [0.6.0] - 2026-04-20
+
+### Added
+
+- **Web UI (Phase 2 Alpha)** — React + FastAPI modern graphical interface
+  - `ariadne web run`: Start the web UI server on http://127.0.0.1:8770
+  - `ariadne web info`: Show web UI status and configuration
+  - React SPA frontend with 6 pages: Home, Search, Memory, Ingest, Graph, Settings
+  - Full REST API coverage: memory CRUD, file ingestion, semantic/RAG search, knowledge graph, LLM config
+  - Multi-language support (8 languages)
+  - React + Vite + TypeScript frontend with react-router-dom and axios
+
+- **Web Optional Dependencies**: `fastapi>=0.100.0`, `uvicorn>=0.23.0`, `pydantic>=2.0.0`
+
+### Changed
+
+- **Version**: Bumped from 0.5.0 to 0.6.0
+
 ## [0.5.0] - 2026-04-20
 
 ### Added

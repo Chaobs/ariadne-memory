@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ariadne-memory"
-version = "0.5.0"
+version = "0.6.0"
 description = "Cross-source AI memory and knowledge weaving system"
 readme = "README.md"
 license = "MIT"
@@ -19,7 +19,8 @@ keywords = [
     "vector-search",
     "knowledge-management",
     "rag",
-    "mcp"
+    "mcp",
+    "web-ui"
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -54,6 +55,12 @@ rag = [
     "rank-bm25>=0.2.2",
     "sentence-transformers>=2.2.0",
 ]
+# Web UI dependencies (installed separately or via: pip install ariadne[web])
+web = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "pydantic>=2.0.0",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -67,6 +74,15 @@ llm = [
     "anthropic>=0.18.0",
     "dashscope>=1.14.0",
     "groq>=0.4.0",
+]
+rag = [
+    "rank-bm25>=0.2.2",
+    "sentence-transformers>=2.2.0",
+]
+web = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "pydantic>=2.0.0",
 ]
 
 [project.scripts]
