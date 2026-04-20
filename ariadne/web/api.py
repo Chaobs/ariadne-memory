@@ -1447,20 +1447,30 @@ class SPAStaticFiles(StaticFiles):
 
     Normal StaticFiles with html=True only serves index.html for directory
     paths (ending in /). This class additionally serves index.html for any
-    non-file path (like /memory, /search), enabling full SPA client-side routing.
+    non-file path (like /memory /search), enabling full SPA client-side routing.
+
+    IMPORTANT — Fallback Safety Check:
+    We MUST check os.path.isfile() before returning index.html on 404.
+    Without this check, if a real static file (e.g. /assets/index-xxx.js)
+    exists but StaticFiles raises 404 for some other reason (e.g. a
+    permission or encoding error), we would incorrectly return index.html.
+    The browser then receives HTML instead of JavaScript, causing:
+        "Failed to load module script: Expected a JavaScript-or-Wasm module
+         script but the server responded with a MIME type of text/html"
+    This manifests as a blank page. The fix: only serve index.html when the
+    file genuinely does not exist on disk.
     """
 
     async def get_response(self, path: str, scope: Scope) -> Response:
-        # First try to serve the actual file from disk
         try:
             return await super().get_response(path, scope)
         except StarletteHTTPException as exc:
             if exc.status_code == 404:
-                # Check if the file actually exists — only serve index.html for true missing files
-                # (not for existing files that fail for other reasons)
+                # Only serve index.html if the file truly does not exist.
+                # See class docstring for the full explanation of why this check is needed.
                 full_path = os.path.join(self.directory, path.lstrip("/"))
                 if os.path.isfile(full_path):
-                    raise  # File exists but something else failed — re-raise
+                    raise  # File exists but failed for another reason — re-raise
                 if not scope.get("path", "").startswith("/api"):
                     index_path = os.path.join(self.directory, "index.html")
                     if os.path.isfile(index_path):
