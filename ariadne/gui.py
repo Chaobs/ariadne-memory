@@ -74,6 +74,7 @@ LABELS = {
         "provider": "Provider:", "model": "Model:", "api_key": "API Key:", "test": "Test",
         "save": "Save", "cancel": "Cancel", "output_lang": "Output Language:",
         "format": "Format:", "export_btn": "Export", "graph_view": "View Graph",
+        "graph_enrich": "Enrich Graph", "graph_status": "Graph Status:",
         "summarize_btn": "Summarize", "status_ready": "Ready", "no_llm": "No LLM configured",
         "test_success": "LLM connection successful!", "test_fail": "LLM connection failed",
     },
@@ -92,6 +93,7 @@ LABELS = {
         "provider": "提供商:", "model": "模型:", "api_key": "API 密钥:", "test": "测试",
         "save": "保存", "cancel": "取消", "output_lang": "输出语言:",
         "format": "格式:", "export_btn": "导出", "graph_view": "查看图谱",
+        "graph_enrich": "图谱增强", "graph_status": "图谱状态:",
         "summarize_btn": "生成摘要", "status_ready": "就绪", "no_llm": "未配置 LLM",
         "test_success": "LLM 连接成功!", "test_fail": "LLM 连接失败",
     },
@@ -110,6 +112,7 @@ LABELS = {
         "provider": "提供商:", "model": "模型:", "api_key": "API 密鑰:", "test": "測試",
         "save": "儲存", "cancel": "取消", "output_lang": "輸出語言:",
         "format": "格式:", "export_btn": "匯出", "graph_view": "查看圖譜",
+        "graph_enrich": "圖譜增強", "graph_status": "圖譜狀態:",
         "summarize_btn": "生成摘要", "status_ready": "就緒", "no_llm": "未設定 LLM",
         "test_success": "LLM 連線成功!", "test_fail": "LLM 連線失敗",
     },
@@ -128,6 +131,7 @@ LABELS = {
         "provider": "Fournisseur:", "model": "Modele:", "api_key": "Cle API:", "test": "Tester",
         "save": "Enregistrer", "cancel": "Annuler", "output_lang": "Langue de sortie:",
         "format": "Format:", "export_btn": "Exporter", "graph_view": "Voir le graphe",
+        "graph_enrich": "Enrichir le graphe", "graph_status": "Statut du graphe:",
         "summarize_btn": "Resumer", "status_ready": "Pret", "no_llm": "LLM non configure",
         "test_success": "Connexion LLM reussie!", "test_fail": "Connexion LLM echouee",
     },
@@ -768,6 +772,7 @@ class AriadneGUI:
         self._update_memory_list()
         self._update_stats()
         self._update_info()
+        self._update_graph_status()
     
     def _create_widgets(self):
         # Menu bar
@@ -1007,8 +1012,15 @@ class AriadneGUI:
         ttk.Button(export_group, text=get_label("export_btn"), 
                   command=self._do_export).pack(side=tk.LEFT, padx=5)
         
+        ttk.Button(export_group, text=get_label("graph_enrich"), 
+                  command=self._do_enrich_graph).pack(side=tk.LEFT, padx=5)
+        
         ttk.Button(export_group, text=get_label("graph_view"), 
                   command=self._view_graph).pack(side=tk.LEFT, padx=5)
+        
+        # Graph status label
+        self.graph_status_var = tk.StringVar(value="0 entities, 0 relations")
+        ttk.Label(export_group, textvariable=self.graph_status_var).pack(side=tk.LEFT, padx=10)
     
     # === Memory System Operations ===
     
@@ -1028,6 +1040,8 @@ class AriadneGUI:
         if new_system and new_system != self.current_system:
             self.current_system = new_system
             self._update_stats()
+            self._update_info()
+            self._update_graph_status()
             self._status(f"Switched to: {new_system}")
     
     def _refresh(self):
@@ -1284,6 +1298,7 @@ class AriadneGUI:
     def _ingest_complete(self, docs_count, skipped, files_count, errors):
         self.progress["value"] = 0
         self._update_stats()
+        self._update_info()
 
         # Build status message
         parts = []
@@ -1411,6 +1426,8 @@ class AriadneGUI:
             self.ingest_stats_label.config(text=f"Error: {err_msg}")
     
     def _update_info(self):
+        # Must enable before delete/insert when in DISABLED state
+        self.info_text.config(state=tk.NORMAL)
         self.info_text.delete(1.0, tk.END)
         
         text = f"Ariadne Memory System v{__version__}\n"
@@ -1431,7 +1448,8 @@ class AriadneGUI:
         
         systems = self.manager.list_systems()
         for s in systems:
-            count = self.manager.get_info(s.name).get("document_count", "?") if self.manager.get_info(s.name) else "?"
+            s_info = self.manager.get_info(s.name)
+            count = s_info.get("document_count", "?") if s_info else "?"
             marker = " * " if s.name == self.current_system else "   "
             text += f"{marker}{s.name}: {count} docs\n"
         
@@ -1525,6 +1543,96 @@ class AriadneGUI:
             
         except Exception as e:
             messagebox.showerror("Error", f"Export failed:\n{e}")
+    
+    def _do_enrich_graph(self):
+        """Extract entities and relations from existing documents into the knowledge graph.
+        
+        This runs the LLM entity extraction over all documents in the current memory system.
+        """
+        from ariadne.graph import GraphStorage, GraphEnricher
+        from ariadne.paths import GRAPH_DB_PATH
+        
+        # Check LLM availability first
+        llm = self.config.create_llm()
+        if llm is None:
+            messagebox.showwarning("No LLM", get_label("no_llm"))
+            return
+        
+        # Ask for confirmation
+        store = self.manager.get_store(self.current_system)
+        doc_count = store.count()
+        if doc_count == 0:
+            messagebox.showinfo("No Documents", 
+                "No documents in this memory system.\nPlease ingest files first.")
+            return
+        
+        confirm = messagebox.askyesno(
+            "Confirm Enrich Graph",
+            f"This will extract entities and relations from {doc_count} documents.\n\n"
+            f"LLM: {self.config.get('llm.provider', 'unknown')}\n\n"
+            f"Proceed?"
+        )
+        if not confirm:
+            return
+        
+        # Update status
+        self._status(f"Enriching graph with {doc_count} documents...")
+        self.graph_status_var.set("Processing...")
+        
+        def worker():
+            try:
+                graph = GraphStorage(db_path=str(GRAPH_DB_PATH))
+                enricher = GraphEnricher(llm=llm)
+                
+                all_docs = store.get_all_documents(limit=1000)
+                entities_added = 0
+                relations_added = 0
+                errors = 0
+                
+                for i, doc in enumerate(all_docs):
+                    try:
+                        graph_doc = enricher.enrich(doc)
+                        for entity in graph_doc.entities:
+                            graph.add_entity(entity)
+                            entities_added += 1
+                        for relation in graph_doc.relations:
+                            graph.add_relation(relation)
+                            relations_added += 1
+                    except Exception as e:
+                        errors += 1
+                    
+                    # Update progress every 10 docs
+                    if (i + 1) % 10 == 0:
+                        progress = f"Entities: {entities_added}, Relations: {relations_added}"
+                        self.root.after(0, lambda p=progress: self.graph_status_var.set(p))
+                
+                # Update final status
+                self.root.after(0, lambda: self._update_graph_status())
+                self.root.after(0, lambda: self._status("Graph enrichment complete"))
+                self.root.after(0, lambda e=errors: messagebox.showinfo(
+                    "Enrichment Complete",
+                    f"Entities added: {entities_added}\n"
+                    f"Relations added: {relations_added}\n"
+                    f"Errors: {e}"
+                ))
+                
+            except Exception as e:
+                err_msg = str(e)
+                self.root.after(0, lambda: self.graph_status_var.set("Error"))
+                self.root.after(0, lambda m=err_msg: messagebox.showerror("Enrichment Error", m))
+                self.root.after(0, lambda: self._status("Enrichment failed"))
+        
+        threading.Thread(target=worker, daemon=True).start()
+    
+    def _update_graph_status(self):
+        """Update the graph status label with current entity/relation counts."""
+        try:
+            graph = GraphStorage()
+            entities = graph.get_all_entities()
+            relations = graph.get_all_relations()
+            self.graph_status_var.set(f"{len(entities)} entities, {len(relations)} relations")
+        except Exception:
+            self.graph_status_var.set("N/A")
     
     def _view_graph(self):
         try:

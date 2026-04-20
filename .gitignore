@@ -49,7 +49,9 @@ htmlcov/
 
 # Vendored packages (already included in repository)
 vendor/packages/
+vendor/*.whl
 # vendor/models/ (uncomment if using Git LFS)
+vendor/models/hub/
 
 # Personal configuration and local data — DO NOT commit
 config.json

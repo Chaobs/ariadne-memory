@@ -160,6 +160,14 @@ class VectorStore:
                     metadata={"description": f"Ariadne memory: {self.collection_name}"},
                 )
                 return  # Success
+            except ValueError as exc:
+                # ChromaDB caches PersistentClient instances per path.
+                # If a previous instance was created with different settings
+                # (e.g. from _migrate_collection), clear the cache and retry.
+                if "already exists" in str(exc) and attempt == 0:
+                    chromadb.api.shared_system_client.SharedSystemClient.clear_system_cache()
+                    continue
+                raise
             except Exception as exc:
                 last_exc = exc
                 if attempt == 0 and _is_db_corruption_error(exc) and self._wipe_chroma_files(persist_dir):
@@ -312,6 +320,40 @@ class VectorStore:
     def count(self) -> int:
         """Return the total number of documents in the store."""
         return self._collection.count()
+
+    def get_all_documents(self, limit: int = 10000) -> List[Document]:
+        """
+        Retrieve all documents from the store.
+
+        Args:
+            limit: Maximum number of documents to return (default 10000).
+
+        Returns:
+            List of all Document objects in the store.
+        """
+        results = self._collection.get(limit=limit, include=["documents", "metadatas"])
+        documents = []
+        if results.get("documents"):
+            for i, content in enumerate(results["documents"]):
+                metadata = (results["metadatas"][i]) if results.get("metadatas") else {}
+                source_type_str = metadata.get("source_type", "unknown")
+                try:
+                    st = SourceType(source_type_str)
+                except ValueError:
+                    st = SourceType.UNKNOWN
+                doc = Document(
+                    content=content,
+                    source_type=st,
+                    source_path=metadata.get("source_path", ""),
+                    chunk_index=metadata.get("chunk_index", 0),
+                    total_chunks=metadata.get("total_chunks", 1),
+                    metadata={k: v for k, v in metadata.items()
+                              if k not in ("source_type", "source_path", "chunk_index", "total_chunks")},
+                )
+                # doc_id is a computed property based on source_path + chunk_index;
+                # no manual assignment needed
+                documents.append(doc)
+        return documents
 
     def clear(self) -> None:
         """Clear all documents from the store."""

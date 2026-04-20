@@ -403,8 +403,15 @@ vendor/                    # 第三方库本地化
 | [requests](https://github.com/psf/requests) | ≥2.31.0 | Apache 2.0 | HTTP 请求 |
 | [PyYAML](https://github.com/yaml/pyyaml) | ≥6.0 | MIT | YAML 解析 |
 | [tqdm](https://github.com/tqdm/tqdm) | ≥4.65.0 | MIT | 进度条 |
-| [astor](https://github.com/simonpercivall/astor) | ≥0.8.1 | BSD-3-Clause | AST 解析 |
-| [pathspec](https://github.com/cpburnz/python-pathspec) | ≥0.11.0 | MPL-2.0 | 路径匹配 |
+| [Typer](https://github.com/tiangolo/typer) | ≥0.9.0 | MIT | CLI 框架 |
+| [Rich](https://github.com/Textualize/rich) | ≥10.11.0 | MIT | 终端美化 |
+| [markitdown](https://github.com/microsoft/markitdown) | ≥0.1.0 | MIT | 通用文档转换 |
+| [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) | ≥4.12 | MIT | HTML 解析 |
+| [ebooklib](https://github.com/aerkalov/ebooklib) | ≥0.20 | AGPL-3.0 | EPUB 解析 |
+| [Pillow](https://github.com/python-pillow/Pillow) | ≥10.0 | HPND | 图片处理 |
+| [lxml](https://github.com/lxml/lxml) | ≥6.0 | BSD-3-Clause | XML/HTML 解析 |
+| [oletools](https://github.com/decalage2/oletools) | ≥0.60 | Apache 2.0 | MSG 文件解析 |
+| [six](https://github.com/benjaminp/six) | ≥1.17 | MIT | Python 2/3 兼容 |
 
 **注意**：all-MiniLM-L6-v2 模型采用 Apache 2.0 许可证，但训练数据包含 MS MARCO 等非商业可用数据集。如需商业使用，请注意相关限制。
 

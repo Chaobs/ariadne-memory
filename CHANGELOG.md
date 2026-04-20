@@ -26,7 +26,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **RAG optional dependencies**: `rank-bm25` + `sentence-transformers` (separate install)
 
+- **GUI Graph Enrichment**: Added "Enrich Graph" button to Advanced tab
+  - `_do_enrich_graph()` method for LLM entity extraction
+  - `_update_graph_status()` method to display entity/relation counts
+  - Multi-language support (en/zh_CN/zh_TW/fr)
+
+### Fixed
+
+- **GUI Info panel refresh**: `_update_info()` now correctly handles DISABLED state
+- **JSON/TXT encoding**: Robust multi-encoding detection (utf-8-sig → utf-8 → gb18030 → latin-1)
+- **Memory rename/import**: ChromaDB collection migration for Windows compatibility
+- **GUI Enrich Graph import error**: Removed invalid `_compute_doc_id` import from store.py
+
 ### Changed
+
+- **Vendor dependencies**: Complete package localization with 24 whl files
+  - Added: typer, rich, beautifulsoup4, ebooklib, Pillow, markitdown, oletools, lxml, six
+  - All whl files extracted for direct Python import
+  - Added `vendor/download_deps.py` and `vendor/extract_whl.py` scripts
 
 - **Version**: Bumped from 0.4.0 to 0.5.0
 

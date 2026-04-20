@@ -57,20 +57,20 @@ class IngestTool(MCPTool):
 
         try:
             from ariadne.ingest import get_ingestor
-            from ariadne.vector import VectorStore
+            from ariadne.memory import VectorStore
 
             ingestor = get_ingestor(source)
             documents = ingestor.ingest(source)
 
-            vector_store = VectorStore(str(self._vector_store)) if self._vector_store else VectorStore()
-            for doc in documents:
-                vector_store.add_document(doc)
+            vector_store = VectorStore(persist_dir=str(self._vector_store)) if self._vector_store else VectorStore()
+            if documents:
+                vector_store.add(documents)
 
             result = {
                 "source": source,
                 "documents_ingested": len(documents),
                 "collection": collection,
-                "chunks": sum(d.get("total_chunks", 1) for d in documents),
+                "chunks": sum(d.total_chunks for d in documents),
             }
 
             if extract_entities and self._graph_storage:
@@ -146,19 +146,19 @@ class SearchTool(MCPTool):
             return {"error": "Vector store not available", "results": []}
 
         try:
-            from ariadne.vector import VectorStore
-            vector_store = VectorStore(str(self._vector_store))
-            results = vector_store.search(query, n_results=limit, collection=collection)
+            from ariadne.memory import VectorStore
+            vector_store = VectorStore(persist_dir=str(self._vector_store)) if self._vector_store else VectorStore()
+            results = vector_store.search(query, top_k=limit)
 
             filtered = [
                 {
-                    "content": r.get("content", "")[:1000],
-                    "source": r.get("source_path", ""),
-                    "score": r.get("score", 0),
-                    "metadata": r.get("metadata", {}),
+                    "content": doc.content[:1000],
+                    "source": doc.source_path,
+                    "score": float(score),
+                    "metadata": doc.metadata,
                 }
-                for r in results
-                if r.get("score", 0) >= min_score
+                for doc, score in results
+                if float(score) >= min_score
             ]
 
             return {
@@ -315,9 +315,9 @@ class StatsTool(MCPTool):
 
         if self._vector_store:
             try:
-                from ariadne.vector import VectorStore
-                vector_store = VectorStore(str(self._vector_store))
-                stats["document_count"] = vector_store.count(collection=collection)
+                from ariadne.memory import VectorStore
+                vector_store = VectorStore(persist_dir=str(self._vector_store))
+                stats["document_count"] = vector_store.count()
             except Exception as e:
                 logger.warning(f"Could not get vector stats: {e}")
                 stats["document_count"] = 0

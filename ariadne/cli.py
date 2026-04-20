@@ -24,6 +24,20 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich.text import Text
 
+# ── Windows GBK console Unicode fix ───────────────────────────────────────────
+# Force stdout/stderr to UTF-8 before any Rich output.
+# Rich Console uses the console's encoding at instantiation time; if that encoding
+# is GBK/CP936 it cannot render Unicode box-drawing / checkmark characters.
+import sys as _sys
+if _sys.platform == "win32":
+    try:
+        import io
+        _sys.stdout = io.TextIOWrapper(_sys.stdout.buffer, encoding="utf-8", errors="replace")
+        _sys.stderr = io.TextIOWrapper(_sys.stderr.buffer, encoding="utf-8", errors="replace")
+    except Exception:
+        pass  # Best-effort only; non-Windows or non-console environments are unaffected
+# ────────────────────────────────────────────────────────────────────────────────
+
 from ariadne import __version__
 from ariadne.memory import VectorStore, MemoryManager, get_manager
 from ariadne.ingest import get_ingestor
@@ -88,6 +102,9 @@ app.add_typer(advanced_app, name="advanced")
 
 rag_app = typer.Typer(help="RAG pipeline commands (hybrid search + reranking + citations).")
 app.add_typer(rag_app, name="rag")
+
+mcp_app = typer.Typer(help="MCP server commands (Model Context Protocol integration).")
+app.add_typer(mcp_app, name="mcp")
 
 
 def version_callback(value: bool):
@@ -307,6 +324,8 @@ def ingest(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
     batch_size: int = typer.Option(100, "--batch-size", "-b", help="Batch size for vector storage"),
     memory: Optional[str] = typer.Option(None, "--memory", "-m", help="Target memory system name"),
+    enrich: bool = typer.Option(False, "--enrich", "-e",
+        help="Extract entities/relations via LLM and store in knowledge graph"),
 ):
     """Ingest a file or directory into a memory system."""
     manager = get_manager()
@@ -379,6 +398,51 @@ def ingest(
     # Flush remaining docs
     if batch_docs:
         store.add(batch_docs)
+
+    # Knowledge Graph enrichment
+    entities_added = 0
+    relations_added = 0
+    if enrich and docs_created > 0:
+        from ariadne.paths import GRAPH_DB_PATH
+        try:
+            from ariadne.graph import GraphStorage, GraphEnricher
+            from ariadne.config import get_config
+
+            graph = GraphStorage(db_path=str(GRAPH_DB_PATH))
+            cfg = get_config()
+            llm = cfg.create_llm()
+
+            if llm is None:
+                console.print("[yellow]Warning: No LLM configured. "
+                              "Run 'ariadne config test' to set up LLM.[/yellow]")
+            else:
+                enricher = GraphEnricher(llm=llm)
+                # Re-fetch all docs for enrichment (from the vector store)
+                all_docs = store.get_all_documents()
+
+                with console.status("[cyan]Extracting entities via LLM..."):
+                    for doc in all_docs:
+                        try:
+                            graph_doc = enricher.enrich(doc)
+                            for entity in graph_doc.entities:
+                                graph.add_entity(entity)
+                                entities_added += 1
+                            for relation in graph_doc.relations:
+                                graph.add_relation(relation)
+                                relations_added += 1
+                        except Exception as e:
+                            if verbose:
+                                console.print(f"  [dim]Enrich skip: {e}[/dim]")
+
+                console.print(
+                    f"  Graph: [cyan]+{entities_added}[/cyan] entities, "
+                    f"[cyan]+{relations_added}[/cyan] relations"
+                )
+        except Exception as e:
+            console.print(f"[yellow]Graph enrichment skipped: {e}[/yellow]")
+            if verbose:
+                import traceback
+                console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
     # Summary
     console.print()
@@ -680,37 +744,212 @@ Please provide:
 @advanced_app.command("graph")
 def advanced_graph(
     memory: Optional[str] = typer.Option(None, "--memory", "-m", help="Target memory system"),
-    format: str = typer.Option("text", "--format", "-f", help="Output format: text, dot, json"),
+    format: str = typer.Option("text", "--format", "-f",
+        help="Output format: text, dot, json, mermaid"),
+    query: Optional[str] = typer.Option(None, "--query", "-q",
+        help="Query a specific entity by name"),
+    depth: int = typer.Option(1, "--depth", "-d", help="Traversal depth for entity query"),
+    max_nodes: int = typer.Option(50, "--max-nodes", help="Maximum nodes to display"),
+    output: Optional[str] = typer.Option(None, "--output", "-o",
+        help="Write output to file instead of stdout"),
 ):
     """Display knowledge graph or entity relationships.
 
     Examples:
         ariadne advanced graph
-        ariadne advanced graph -m research -f dot
+        ariadne advanced graph -f dot > graph.dot
+        ariadne advanced graph -q "Albert Einstein" -d 2
+        ariadne advanced graph -o graph.html -f html
     """
+    from ariadne.graph import GraphStorage
+    from ariadne.advanced import GraphVisualizer
+    from ariadne.paths import GRAPH_DB_PATH
+
+    graph_path = str(GRAPH_DB_PATH)
+    try:
+        graph = GraphStorage(db_path=graph_path)
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not load graph storage: {e}[/yellow]")
+        graph = None
+
+    entity_count = len(graph) if graph else 0
+    relation_count = len(graph.get_all_relations()) if graph else 0
+
+    # text mode — summary + optional entity query
     if format == "text":
         console.print(Panel(
-            "This feature extracts entities and relationships from your memory.\n"
-            "For visualization, use the GUI or export to DOT format.\n\n"
-            "[dim]Note: Full graph extraction requires LLM configuration.\n"
-            "Run 'ariadne config test' to verify your setup.[/dim]",
-            title="Knowledge Graph",
+            f"Entities: [cyan]{entity_count}[/cyan]  |  "
+            f"Relations: [cyan]{relation_count}[/cyan]\n"
+            f"Graph DB: [dim]{GRAPH_DB_PATH}[/dim]\n\n"
+            + ("[dim]No entities yet. Run 'ariadne advanced graph-enrich' "
+               "to extract entities from your documents.[/dim]"
+               if entity_count == 0 else ""),
+            title="Knowledge Graph Summary",
             border_style="cyan",
         ))
-    elif format == "dot":
-        console.print("// DOT format for knowledge graph visualization")
-        console.print("// Use with Graphviz: dot -Tpng graph.dot -o graph.png")
-        console.print("digraph KnowledgeGraph {")
-        console.print('    rankdir=LR;')
-        console.print('    node [shape=box];')
-        console.print("    // Configure LLM to enable entity extraction")
-        console.print("}")
+
+        if query and graph:
+            entity = graph.get_entity_by_name(query)
+            if not entity:
+                console.print(f"[yellow]Entity not found: {query}[/yellow]")
+            else:
+                console.print(f"\n[bold cyan]{entity.name}[/bold cyan] "
+                              f"([dim]{entity.entity_type.value}[/dim])")
+                if entity.description:
+                    console.print(f"  {entity.description}")
+                relations = graph.get_relations(entity.entity_id, max_depth=depth)
+                if relations:
+                    table = Table(title=f"Relations ({len(relations)})", show_lines=True)
+                    table.add_column("Type", style="cyan")
+                    table.add_column("Connected Entity", style="green")
+                    table.add_column("Description", style="dim")
+                    for rel in relations:
+                        target = graph.get_entity(rel.target_id)
+                        target_name = target.name if target else rel.target_id
+                        table.add_row(
+                            rel.relation_type.value,
+                            target_name,
+                            rel.description or "",
+                        )
+                    console.print(table)
+                else:
+                    console.print("[dim]No relations found.[/dim]")
+        return
+
+    # Non-text format — use GraphVisualizer
+    if not graph:
+        console.print("[red]Graph storage not available.[/red]")
+        raise typer.Exit(1)
+
+    vis = GraphVisualizer(graph)
+
+    entity_ids = None
+    if query:
+        entity = graph.get_entity_by_name(query)
+        if entity:
+            # Build ego-graph: entity + its neighbors
+            entity_ids = {entity.entity_id}
+            relations = graph.get_relations(entity.entity_id, max_depth=depth)
+            for rel in relations:
+                entity_ids.add(rel.target_id)
+                entity_ids.add(rel.source_id)
+
+    if format == "dot":
+        output_str = vis.to_dot(entity_ids=list(entity_ids) if entity_ids else None,
+                                max_nodes=max_nodes)
+    elif format == "json":
+        output_str = vis.to_json(entity_ids=list(entity_ids) if entity_ids else None,
+                                 max_nodes=max_nodes)
+    elif format == "mermaid":
+        output_str = vis.to_mermaid(entity_ids=list(entity_ids) if entity_ids else None,
+                                    max_nodes=max_nodes)
     else:
-        import json
-        console.print(json.dumps(
-            {"status": "graph_feature", "note": "Configure LLM for entity extraction"},
-            indent=2,
-        ))
+        console.print(f"[red]Unknown format: {format}[/red]")
+        raise typer.Exit(1)
+
+    if output:
+        Path(output).write_text(output_str, encoding="utf-8")
+        console.print(f"[green]Written {len(output_str)} chars to {output}[/green]")
+    else:
+        console.print(output_str)
+
+
+@advanced_app.command("graph-enrich")
+def advanced_graph_enrich(
+    memory: Optional[str] = typer.Option(None, "--memory", "-m",
+        help="Memory system to enrich (default: current default)"),
+    limit: int = typer.Option(100, "--limit", "-l",
+        help="Maximum documents to process (0=all)"),
+    force: bool = typer.Option(False, "--force", "-f",
+        help="Re-extract even for documents already with entities"),
+    verbose: bool = typer.Option(False, "--verbose", "-v",
+        help="Show per-document progress"),
+):
+    """Extract entities and relations from existing documents into the knowledge graph.
+
+    This backfills the knowledge graph by running LLM entity extraction over
+    all documents currently stored in a memory system.
+
+    Examples:
+        ariadne advanced graph-enrich
+        ariadne advanced graph-enrich -m research -l 50 -v
+    """
+    from ariadne.graph import GraphStorage, GraphEnricher
+    from ariadne.paths import GRAPH_DB_PATH
+
+    cfg = get_config()
+    llm = cfg.create_llm()
+    if llm is None:
+        console.print("[bold red]No LLM configured.[/bold red]")
+        console.print("Run 'ariadne config set <provider>' to set up an LLM first.")
+        raise typer.Exit(1)
+
+    manager = get_manager()
+    store = manager.get_store(memory)
+    graph = GraphStorage(db_path=str(GRAPH_DB_PATH))
+
+    # Get documents from vector store
+    all_docs = store.get_all_documents(limit=limit if limit > 0 else 10000)
+    if not all_docs:
+        console.print("[yellow]No documents found in this memory system.[/yellow]")
+        return
+
+    target = memory or manager.DEFAULT_COLLECTION
+    console.print(f"Memory: [cyan]{target}[/cyan]  |  Documents: [cyan]{len(all_docs)}[/cyan]")
+    console.print(f"LLM: [dim]{cfg.get('llm.provider', 'unknown')}[/dim]\n")
+
+    enricher = GraphEnricher(llm=llm)
+    entities_added = 0
+    relations_added = 0
+    errors = 0
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Extracting entities...", total=len(all_docs))
+
+        for doc in all_docs:
+            try:
+                graph_doc = enricher.enrich(doc)
+                for entity in graph_doc.entities:
+                    graph.add_entity(entity)
+                    entities_added += 1
+                for relation in graph_doc.relations:
+                    graph.add_relation(relation)
+                    relations_added += 1
+
+                if verbose:
+                    names = [e.name for e in graph_doc.entities[:3]]
+                    console.print(
+                        f"  [green]+[/green] {Path(doc.source_path).name}: "
+                        f"{len(graph_doc.entities)} entities, "
+                        f"{len(graph_doc.relations)} relations"
+                        + (f" ({', '.join(names)})" if names else "")
+                    )
+            except Exception as e:
+                errors += 1
+                if verbose:
+                    console.print(f"  [red]ERROR[/red] {Path(doc.source_path).name}: {e}")
+
+            progress.advance(task)
+
+    # Summary
+    console.print()
+    console.print(Panel(
+        f"Documents processed: [bold green]{len(all_docs)}[/bold green]\n"
+        f"Entities added:     [cyan]{entities_added}[/cyan]\n"
+        f"Relations added:     [cyan]{relations_added}[/cyan]"
+        + (f"\nErrors:              [red]{errors}[/red]" if errors else ""),
+        title="Graph Enrich Complete",
+        border_style="green" if not errors else "yellow",
+    ))
+    console.print(
+        f"\nView the graph: [dim]ariadne advanced graph[/dim]"
+    )
 
 
 # ═══════════════════════════════════════════
@@ -878,6 +1117,107 @@ def rag_health(
         table.add_row(label, status_str, details)
 
     console.print(table)
+
+
+# ═══════════════════════════════════════════
+# MCP Server
+# ═══════════════════════════════════════════
+
+@mcp_app.command("run")
+def mcp_run(
+    transport: str = typer.Option("stdio", "--transport", "-t",
+        help="Transport mode: stdio (for Claude Code) or http"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Host for HTTP mode"),
+    port: int = typer.Option(8765, "--port", "-p", help="Port for HTTP mode"),
+):
+    """Start the Ariadne MCP server.
+
+    This exposes Ariadne's capabilities (search, ingest, graph) as MCP tools
+    that can be consumed by Claude Code, Cursor, or any MCP-compatible client.
+
+    Examples:
+        ariadne mcp run                          # stdio mode (for Claude Code)
+        ariadne mcp run -t http -p 8765         # HTTP mode
+        npx @anthropic/mcp-cli ariadne -- ariadne mcp run  # via MCP CLI proxy
+    """
+    try:
+        from ariadne.mcp import AriadneMCPServer
+    except ImportError as e:
+        console.print("[bold red]MCP module not available.[/bold red]")
+        console.print(f"[dim]{e}[/dim]")
+        raise typer.Exit(1)
+
+    from ariadne.paths import MEMORIES_DIR, GRAPH_DB_PATH
+    from ariadne.config import get_config
+
+    cfg = get_config()
+    server = AriadneMCPServer(
+        vector_store_path=str(MEMORIES_DIR),
+        graph_db_path=str(GRAPH_DB_PATH),
+    )
+
+    console.print(f"[cyan]Starting Ariadne MCP Server ({transport} mode)...[/cyan]")
+    console.print(f"  Vector store: [dim]{MEMORIES_DIR}[/dim]")
+    console.print(f"  Graph DB:     [dim]{GRAPH_DB_PATH}[/dim]")
+    console.print(f"  LLM:          [dim]{cfg.get('llm.provider', 'not configured')}[/dim]")
+    console.print()
+
+    if transport == "stdio":
+        server.run_stdio()
+    elif transport == "http":
+        console.print(f"[cyan]HTTP server listening on {host}:{port}[/cyan]")
+        server.run(host=host, port=port)
+    else:
+        console.print(f"[red]Unknown transport: {transport}[/red]")
+        raise typer.Exit(1)
+
+
+@mcp_app.command("info")
+def mcp_info():
+    """Show MCP server configuration and available tools."""
+    try:
+        from ariadne.mcp import AriadneMCPServer
+        from ariadne.mcp.tools import AriadneToolHandler
+    except ImportError as e:
+        console.print("[bold red]MCP module not available.[/bold red]")
+        console.print(f"[dim]{e}[/dim]")
+        raise typer.Exit(1)
+
+    from ariadne.paths import MEMORIES_DIR, GRAPH_DB_PATH
+    from ariadne.config import get_config
+
+    cfg = get_config()
+    server = AriadneMCPServer(
+        vector_store_path=str(MEMORIES_DIR),
+        graph_db_path=str(GRAPH_DB_PATH),
+    )
+    handler = AriadneToolHandler(
+        vector_store=str(MEMORIES_DIR),
+        graph_storage=str(GRAPH_DB_PATH),
+    )
+
+    console.print(Panel(
+        f"[cyan]ariadne-memory[/cyan] MCP Server\n"
+        f"Version: [dim]2.0.0[/dim]  |  Protocol: [dim]2024-11-05[/dim]\n\n"
+        f"Vector store: [dim]{MEMORIES_DIR}[/dim]\n"
+        f"Graph DB:     [dim]{GRAPH_DB_PATH}[/dim]\n"
+        f"LLM:          [dim]{cfg.get('llm.provider', 'not configured')}[/dim]",
+        title="MCP Server Info",
+        border_style="cyan",
+    ))
+
+    tools = handler.list()
+    if tools:
+        console.print(f"\n[bold cyan]Available tools[/bold cyan] ({len(tools)}):")
+        for tool in tools:
+            console.print(f"  • [green]{tool['name']}[/green]")
+            console.print(f"    [dim]{tool['description'][:80]}...[/dim]")
+    else:
+        console.print("[yellow]No tools registered.[/yellow]")
+
+    console.print(f"\n[bold cyan]Usage[/bold cyan]:")
+    console.print(f"  Claude Code:   [dim]claude --mcp ariadne python -m ariadne.cli mcp run[/dim]")
+    console.print(f"  HTTP client:   [dim]POST http://127.0.0.1:8765/mcp[/dim]")
 
 
 # ═══════════════════════════════════════════

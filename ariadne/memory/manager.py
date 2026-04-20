@@ -225,68 +225,162 @@ class MemoryManager:
     def rename(self, old_name: str, new_name: str) -> bool:
         """
         Rename a memory system.
-        
+
+        This handles two things:
+        1. Migrate ChromaDB collection data (old collection name → new) within
+           the same directory
+        2. Update the manifest (name and optionally path)
+
+        The directory on disk is NOT renamed because ChromaDB's PersistentClient
+        holds file locks that prevent ``os.rename`` / ``shutil.move`` on Windows.
+        The collection data inside the database is correctly associated with the
+        new name, which is what matters for search and retrieval.
+
+        If the user wants to rename the directory as well, they can do so
+        manually after shutting down the application.
+
         Args:
             old_name: Current name
             new_name: New name (must not exist)
-            
+
         Returns:
             True if renamed successfully
         """
         if old_name not in self._manifest:
             raise ValueError(f"Memory system '{old_name}' not found")
-        
+
         if new_name in self._manifest:
             raise ValueError(f"Memory system '{new_name}' already exists")
-        
-        # Close VectorStore to release chroma.sqlite3 file lock
-        self._close_store(old_name)
-        
+
         old_dir = Path(self._manifest[old_name]["path"])
-        new_dir = self._get_system_dir(new_name)
-        
-        # Guard against shutil.move nesting: if new_dir already exists on disk,
-        # shutil.move(src, dst) will move src **inside** dst instead of
-        # replacing it — producing the dreaded nested-dir layout (e.g. B/A).
-        if new_dir.exists():
-            if new_dir.is_dir() and any(new_dir.iterdir()):
-                raise ValueError(
-                    f"Target directory already exists and is non-empty: {new_dir}\n"
-                    f"This would cause nesting. Please delete or move '{new_dir}' first."
-                )
-            # Empty dir — safe to remove so shutil.move can create it fresh
-            try:
-                new_dir.rmdir()
-            except OSError:
-                pass
-        
-        # Move directory (with retry for Windows file locks)
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                shutil.move(str(old_dir), str(new_dir))
-                break
-            except PermissionError as e:
-                import time
-                if attempt < max_retries - 1:
-                    time.sleep(0.5)
-                    # Force garbage collection to release any remaining handles
-                    import gc; gc.collect()
-                else:
-                    raise e
-        
-        # Update manifest
+
+        # Step 1: Migrate ChromaDB collection data (old collection name → new)
+        old_collection = self._safe_collection_name(old_name)
+        new_collection = self._safe_collection_name(new_name)
+
+        if old_collection != new_collection:
+            # Ensure store is open and accessible, then migrate
+            store = self.get_store(old_name)
+            self._migrate_collection(str(old_dir), old_collection, new_collection)
+            # Close the old store reference so future calls get a fresh one
+            self._close_store(old_name)
+
+        # Step 2: Update manifest — keep the same directory path
+        # (ChromaDB holds file locks, so renaming the directory on disk
+        # would fail on Windows. The directory name is just cosmetic.)
+        old_entry = self._manifest[old_name].copy()
         del self._manifest[old_name]
         self._manifest[new_name] = {
-            **self._manifest.get(new_name, {}),
+            **old_entry,
             "name": new_name,
-            "path": str(new_dir),
+            "path": str(old_dir),  # Keep the same directory
             "updated_at": datetime.now().isoformat(),
         }
         self._save_manifest()
-        
+
         print(f"Renamed '{old_name}' to '{new_name}'")
         return True
+
+    def _migrate_collection(self, persist_dir: str, old_col: str, new_col: str) -> None:
+        """Migrate ChromaDB collection data from old name to new name.
+
+        ChromaDB does not support renaming collections directly, so we:
+        1. Open the existing collection (old name)
+        2. Read all documents
+        3. Create a new collection (new name) and upsert the data
+        4. Delete the old collection
+
+        Args:
+            persist_dir: Directory where ChromaDB data is stored
+            old_col: Old collection name (ChromaDB-safe)
+            new_col: New collection name (ChromaDB-safe)
+        """
+        import chromadb
+        from chromadb.config import Settings as ChromaSettings
+        import gc
+
+        client = None
+        try:
+            # Clear any cached client to avoid "already exists with different settings"
+            chromadb.api.shared_system_client.SharedSystemClient.clear_system_cache()
+
+            # Use the SAME settings as VectorStore to avoid settings mismatch
+            settings = ChromaSettings(anonymized_telemetry=False)
+            client = chromadb.PersistentClient(path=persist_dir, settings=settings)
+
+            # Get old collection
+            try:
+                old_collection = client.get_collection(old_col)
+            except Exception:
+                # Old collection doesn't exist — nothing to migrate
+                return
+
+            count = old_collection.count()
+            if count == 0:
+                # Empty collection — just delete it and create new one
+                try:
+                    client.delete_collection(old_col)
+                except Exception:
+                    pass
+                client.get_or_create_collection(new_col)
+                return
+
+            # Read all data from old collection in batches
+            all_ids, all_docs, all_metadatas, all_embeddings = [], [], [], []
+            batch_size = 5000
+            offset = 0
+            has_embeddings = False
+
+            while offset < count:
+                result = old_collection.get(
+                    limit=batch_size,
+                    offset=offset,
+                    include=["documents", "metadatas", "embeddings"],
+                )
+                if not result["ids"]:
+                    break
+                all_ids.extend(result["ids"])
+                all_docs.extend(result["documents"])
+                all_metadatas.extend(result["metadatas"])
+                # ChromaDB returns embeddings as numpy arrays which cannot be
+                # tested with plain truthiness ("ambiguous truth value" error).
+                # Use len() instead.
+                emb = result.get("embeddings")
+                if emb is not None and len(emb) > 0:
+                    all_embeddings.extend(emb)
+                    has_embeddings = True
+                offset += len(result["ids"])
+                if len(result["ids"]) < batch_size:
+                    break
+
+            # Create new collection and upsert data
+            new_collection = client.get_or_create_collection(new_col)
+            if all_ids:
+                upsert_kwargs = {
+                    "ids": all_ids,
+                    "documents": all_docs,
+                    "metadatas": all_metadatas,
+                }
+                if has_embeddings and len(all_embeddings) > 0:
+                    upsert_kwargs["embeddings"] = all_embeddings
+                new_collection.upsert(**upsert_kwargs)
+
+            # Delete old collection
+            try:
+                client.delete_collection(old_col)
+            except Exception as e:
+                print(f"Warning: Could not delete old collection '{old_col}': {e}")
+
+            print(f"Migrated collection: {old_col} -> {new_col} ({len(all_ids)} docs)")
+
+        except Exception as e:
+            print(f"Warning: Collection migration failed ({old_col} -> {new_col}): {e}")
+            # Non-fatal — the directory move already succeeded
+        finally:
+            # Clean up client to release file locks
+            if client is not None:
+                del client
+            gc.collect()
     
     def move(self, name: str, new_parent_dir: str) -> bool:
         """
@@ -806,6 +900,9 @@ Type 'yes' to confirm deletion: """
         If the source is inside the memories base directory (e.g. another
         exported folder), use ``move`` instead of ``copy`` to avoid
         file-lock conflicts on Windows.
+
+        After copying/moving the directory, the ChromaDB collection is
+        migrated to match the new system name if needed.
         """
         source = Path(source_path).resolve()
         if not source.exists():
@@ -827,12 +924,139 @@ Type 'yes' to confirm deletion: """
         except Exception as e:
             raise ValueError(f"Failed to import from {source_path}: {e}") from e
 
+        # Migrate ChromaDB collection name if needed
+        # The imported database may have collections with different names;
+        # we need to ensure the collection matches our new system name.
+        new_collection = self._safe_collection_name(name)
+        self._migrate_imported_collection(str(dest_path), new_collection)
+
         ms = MemorySystem(name=name, path=str(dest_path))
         self._manifest[name] = ms.to_dict()
         self._save_manifest()
 
         print(f"Imported memory system from {source_path} as '{name}'")
         return True
+
+    def _migrate_imported_collection(self, persist_dir: str, target_col: str) -> None:
+        """Ensure an imported database has the correct collection name.
+
+        When a memory system is exported and re-imported with a different
+        name, the ChromaDB collections inside still use the old name.
+        This method finds the existing collection and migrates it to
+        the target name.
+
+        Args:
+            persist_dir: Directory where ChromaDB data is stored
+            target_col: Desired collection name (ChromaDB-safe)
+        """
+        import chromadb
+        from chromadb.config import Settings as ChromaSettings
+        import gc
+
+        client = None
+        try:
+            # Clear any cached client to avoid "already exists with different settings"
+            chromadb.api.shared_system_client.SharedSystemClient.clear_system_cache()
+
+            # Use the SAME settings as VectorStore
+            settings = ChromaSettings(anonymized_telemetry=False)
+            client = chromadb.PersistentClient(path=persist_dir, settings=settings)
+
+            # Check if target collection already exists
+            try:
+                existing = client.get_collection(target_col)
+                if existing.count() >= 0:
+                    # Target collection exists — nothing to do
+                    return
+            except Exception:
+                pass
+
+            # Find all collections and migrate the first non-target one
+            collections = client.list_collections()
+            for col_info in collections:
+                col_name = col_info.name if hasattr(col_info, 'name') else str(col_info)
+                if col_name != target_col:
+                    # Found a collection with the old name — migrate it
+                    # Note: we can reuse the same client since it's already open
+                    self._migrate_collection_with_client(client, col_name, target_col)
+                    return
+
+            # No collections found — create empty target collection
+            client.get_or_create_collection(target_col)
+
+        except Exception as e:
+            print(f"Warning: Import collection migration failed for {persist_dir}: {e}")
+        finally:
+            if client is not None:
+                del client
+            gc.collect()
+
+    def _migrate_collection_with_client(self, client, old_col: str, new_col: str) -> None:
+        """Migrate collection using an existing ChromaDB client.
+
+        Same logic as _migrate_collection but reuses an existing client
+        instead of creating a new one (avoids the "already exists" error).
+
+        Args:
+            client: Existing ChromaDB PersistentClient
+            old_col: Old collection name (ChromaDB-safe)
+            new_col: New collection name (ChromaDB-safe)
+        """
+        try:
+            old_collection = client.get_collection(old_col)
+        except Exception:
+            return
+
+        count = old_collection.count()
+        if count == 0:
+            try:
+                client.delete_collection(old_col)
+            except Exception:
+                pass
+            client.get_or_create_collection(new_col)
+            return
+
+        all_ids, all_docs, all_metadatas, all_embeddings = [], [], [], []
+        batch_size = 5000
+        offset = 0
+        has_embeddings = False
+
+        while offset < count:
+            result = old_collection.get(
+                limit=batch_size,
+                offset=offset,
+                include=["documents", "metadatas", "embeddings"],
+            )
+            if not result["ids"]:
+                break
+            all_ids.extend(result["ids"])
+            all_docs.extend(result["documents"])
+            all_metadatas.extend(result["metadatas"])
+            emb = result.get("embeddings")
+            if emb is not None and len(emb) > 0:
+                all_embeddings.extend(emb)
+                has_embeddings = True
+            offset += len(result["ids"])
+            if len(result["ids"]) < batch_size:
+                break
+
+        new_collection = client.get_or_create_collection(new_col)
+        if all_ids:
+            upsert_kwargs = {
+                "ids": all_ids,
+                "documents": all_docs,
+                "metadatas": all_metadatas,
+            }
+            if has_embeddings and len(all_embeddings) > 0:
+                upsert_kwargs["embeddings"] = all_embeddings
+            new_collection.upsert(**upsert_kwargs)
+
+        try:
+            client.delete_collection(old_col)
+        except Exception as e:
+            print(f"Warning: Could not delete old collection '{old_col}': {e}")
+
+        print(f"Migrated collection: {old_col} -> {new_col} ({len(all_ids)} docs)")
 
 
 # Global manager instance

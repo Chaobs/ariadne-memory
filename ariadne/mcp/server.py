@@ -224,8 +224,8 @@ class AriadneMCPServer:
         """Lazy load vector store."""
         if self._vector_store is None:
             try:
-                from ariadne.vector import VectorStore
-                self._vector_store = VectorStore(str(self.vector_store_path))
+                from ariadne.memory import VectorStore
+                self._vector_store = VectorStore(persist_dir=str(self.vector_store_path))
                 logger.info(f"Loaded vector store from {self.vector_store_path}")
             except Exception as e:
                 logger.warning(f"Could not load vector store: {e}")
@@ -435,24 +435,23 @@ class AriadneMCPServer:
         """Execute search tool."""
         query = args.get("query", "")
         limit = args.get("limit", 5)
-        collection = args.get("collection", "default")
 
         if not self.vector_store:
             return {"error": "Vector store not available", "results": []}
 
         try:
-            results = self.vector_store.search(query, n_results=limit)
+            results = self.vector_store.search(query, top_k=limit)
             return {
                 "query": query,
                 "count": len(results),
                 "results": [
                     {
-                        "content": r.get("content", "")[:500],
-                        "source": r.get("source_path", ""),
-                        "score": r.get("score", 0),
-                        "metadata": r.get("metadata", {}),
+                        "content": doc.content[:500],
+                        "source": doc.source_path,
+                        "score": float(score),
+                        "metadata": doc.metadata,
                     }
-                    for r in results
+                    for doc, score in results
                 ],
             }
         except Exception as e:
@@ -468,14 +467,14 @@ class AriadneMCPServer:
 
         try:
             from ariadne.ingest import get_ingestor
-            from ariadne.vector import VectorStore
+            from ariadne.memory import VectorStore
 
             ingestor = get_ingestor(source)
             documents = ingestor.ingest(source)
 
-            vector_store = VectorStore(str(self.vector_store_path))
-            for doc in documents:
-                vector_store.add_document(doc)
+            vector_store = VectorStore(persist_dir=str(self.vector_store_path))
+            if documents:
+                vector_store.add(documents)
 
             return {
                 "source": source,
