@@ -28,7 +28,7 @@ class EPUBIngestor(BaseIngestor):
         docs = ingestor.ingest("book.epub")
     """
     
-    source_type = SourceType.UNKNOWN  # Will be set dynamically
+    source_type = SourceType.EPUB
     
     def _extract(self, path: Path) -> List[str]:
         """Extract text content from EPUB file."""
@@ -129,6 +129,4 @@ class EPUBIngestor(BaseIngestor):
     
     def ingest(self, file_path: str) -> List["Document"]:
         """Ingest an EPUB file and return documents."""
-        # Override to set correct source type
-        self.source_type = SourceType.UNKNOWN
         return super().ingest(file_path)

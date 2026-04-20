@@ -1,0 +1,86 @@
+# Changelog
+
+All notable changes to Ariadne will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.4.0] - 2026-04-20
+
+### Added
+
+- **MarkItDown integration**: Universal ingestor powered by Microsoft's markitdown library
+  - Supports 22+ formats including HTML, RSS, Jupyter notebooks, Outlook MSG, RTF, ODF
+  - Automatic fallback for any format not covered by native ingestors
+  - Header-aware Markdown chunking with H1 context preservation
+  - `MarkItDownIngestor` class with lazy-loaded markitdown dependency
+  - Priority resolution: native ingestors first → markitdown preferred → markitdown fallback → BinaryIngestor
+
+- **Typer CLI**: Complete rewrite from Click to Typer + Rich
+  - Type-hint driven CLI with automatic help generation
+  - Rich-powered beautiful terminal output (panels, tables, progress bars)
+  - Shell completion support (`--install-completion`)
+  - All existing commands preserved with identical functionality
+  - `ariadne memory merge` now uses `--into` flag for target name
+
+- **Deferred deletion**: Mark-and-batch deletion for VectorStore
+  - `delete_doc(doc_id)` marks documents for deferred deletion
+  - `flush_deletes()` executes batch deletion in a single operation
+  - Auto-flush when pending deletes exceed threshold (50)
+  - Context manager support (`with VectorStore() as store:`)
+  - Avoids SQLite lock contention from frequent small deletions
+
+- **SourceType enum expansion**: Added 10 new source types
+  - `EPUB`, `IMAGE`, `OCR`, `ACADEMIC`, `WEB`, `EMAIL`, `VIDEO`, `AUDIO`, `BINARY`, `MARKITDOWN`
+  - All ingestors now use their correct `SourceType` instead of `UNKNOWN`
+
+### Changed
+
+- **`get_ingestor()` factory**: Unified resolution logic across CLI, GUI, and MCP
+  - 3-tier priority: native → markitdown preferred → markitdown fallback → binary
+  - Graceful degradation when markitdown is not installed
+
+- **GUI ingestion**: Now uses `get_ingestor()` factory instead of hardcoded `INGESTORS` dict
+  - Directory scanning uses expanded `SCAN_EXTENSIONS` set (61 formats)
+  - Consistent behavior between CLI and GUI
+
+- **Dependencies**: 
+  - `click` → `typer>=0.9.0` (Click is still a transitive dependency)
+  - Added `rich>=10.11.0` for terminal formatting
+  - Added `markitdown>=0.1.0` for universal format support
+
+- **Version**: Bumped from 0.3.0 to 0.4.0
+
+## [0.3.0] - 2026-04-19
+
+### Added
+
+- Third-party library localization (vendor directory)
+- Data directory migration to project root (.ariadne/)
+- Summarize bug fix (JSON format string escaping)
+- Memory export/import functionality
+- BinaryIngestor for binary file handling
+- Quick start scripts (ariadne-cli/gui .bat + .sh)
+- Japanese locale support (8 languages total)
+- config.sample.json with 9 LLM templates
+
+## [0.2.0] - 2026-04-18
+
+### Added
+
+- Multi-memory system support (CRUD, merge, rename)
+- LLM integration (DeepSeek, Claude, Qwen, Gemini, etc.)
+- Knowledge graph extraction and visualization
+- Multi-language i18n support (7 UN languages + Japanese)
+- Advanced features (summarize, graph, export)
+- MCP Server implementation
+
+## [0.1.0] - 2026-04-17
+
+### Added
+
+- Initial release
+- Core ingestion: Markdown, Word, PPT, PDF, TXT, Excel, CSV
+- Semantic search with ChromaDB
+- Tkinter GUI
+- CLI with Click

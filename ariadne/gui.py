@@ -23,11 +23,7 @@ from typing import List, Optional
 
 from ariadne import __version__
 from ariadne.memory import MemoryManager, get_manager
-from ariadne.ingest import (
-    MarkdownIngestor, WordIngestor, PPTIngestor, PDFIngestor,
-    TxtIngestor, ConversationIngestor, MindMapIngestor,
-    CodeIngestor, ExcelIngestor, CsvIngestor,
-)
+from ariadne.ingest import get_ingestor
 from ariadne.config import (
     AriadneConfig,
     get_config,
@@ -43,23 +39,22 @@ from ariadne.i18n import (
 from ariadne.advanced import Summarizer, GraphVisualizer, Exporter
 from ariadne.graph.storage import GraphStorage
 
-INGESTORS = {
-    ".md": MarkdownIngestor,
-    ".docx": WordIngestor,
-    ".pptx": PPTIngestor,
-    ".pdf": PDFIngestor,
-    ".txt": TxtIngestor,
-    ".mm": MindMapIngestor,
-    ".xmind": MindMapIngestor,
-    ".py": CodeIngestor,
-    ".java": CodeIngestor,
-    ".cpp": CodeIngestor,
-    ".c": CodeIngestor,
-    ".js": CodeIngestor,
-    ".ts": CodeIngestor,
-    ".xlsx": ExcelIngestor,
-    ".xls": ExcelIngestor,
-    ".csv": CsvIngestor,
+# Supported extensions for directory scanning in GUI
+SCAN_EXTENSIONS = {
+    ".md", ".markdown", ".txt", ".pdf", ".docx", ".pptx",
+    ".xlsx", ".xls", ".csv", ".json",
+    ".mm", ".xmind",
+    ".py", ".java", ".cpp", ".c", ".h", ".hpp",
+    ".js", ".ts", ".jsx", ".tsx", ".cs", ".go", ".rs", ".rb",
+    ".php", ".swift", ".kt", ".scala",
+    ".epub", ".bib", ".ris",
+    ".eml", ".mbox",
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp",
+    ".mp4", ".avi", ".mkv", ".mov",
+    ".mp3", ".wav", ".m4a", ".flac", ".ogg",
+    # markitdown-supported
+    ".html", ".htm", ".rss", ".ipynb", ".msg", ".rtf",
+    ".ods", ".odt", ".odp", ".xml",
 }
 
 # Multi-language labels
@@ -1199,7 +1194,7 @@ class AriadneGUI:
         if folder:
             folder_path = Path(folder)
             count = 0
-            for ext in INGESTORS:
+            for ext in SCAN_EXTENSIONS:
                 if self.recursive_var.get():
                     files = folder_path.rglob(f"*{ext}")
                 else:
@@ -1238,7 +1233,6 @@ class AriadneGUI:
             for i, file_path in enumerate(self.selected_files):
                 try:
                     path = Path(file_path)
-                    suffix = path.suffix.lower()
 
                     # Validate file exists and is readable
                     if not path.exists():
@@ -1246,34 +1240,36 @@ class AriadneGUI:
                     if not path.is_file():
                         raise IOError(f"Not a regular file: {file_path}")
 
-                    if suffix in INGESTORS:
-                        ingestor_cls = INGESTORS[suffix]
-                        ingestor = ingestor_cls()
-                        
+                    # Use the unified factory to get the right ingestor
+                    try:
+                        ingestor = get_ingestor(file_path)
+                    except (ValueError, ImportError):
+                        skipped += 1
+                        if self.verbose_var.get():
+                            suffix = path.suffix.lower()
+                            print(f"SKIP {path.name} (unsupported format: {suffix})")
+                        continue
+
+                    try:
+                        docs = ingestor.ingest(file_path)
+                    except Exception as ingest_err:
+                        raise RuntimeError(
+                            f"{path.name}: Ingestion failed — {ingest_err}"
+                        ) from ingest_err
+
+                    if docs:
                         try:
-                            docs = ingestor.ingest(file_path)
-                        except Exception as ingest_err:
+                            store = self.manager.get_store(self.current_system)
+                            store.add(docs)
+                            docs_added += len(docs)
+                        except Exception as db_err:
                             raise RuntimeError(
-                                f"{path.name}: Ingestion failed — {ingest_err}"
-                            ) from ingest_err
-                        
-                        if docs:
-                            try:
-                                store = self.manager.get_store(self.current_system)
-                                store.add(docs)
-                                docs_added += len(docs)
-                            except Exception as db_err:
-                                raise RuntimeError(
-                                    f"{path.name}: Database write failed — {db_err}"
-                                ) from db_err
-                        else:
-                            skipped += 1
-                            if self.verbose_var.get():
-                                print(f"EMPTY {path.name} (no content extracted)")
+                                f"{path.name}: Database write failed — {db_err}"
+                            ) from db_err
                     else:
                         skipped += 1
                         if self.verbose_var.get():
-                            print(f"SKIP {path.name} (unsupported format: {suffix})")
+                            print(f"EMPTY {path.name} (no content extracted)")
                     
                 except Exception as e:
                     errors.append((file_path, str(e)))

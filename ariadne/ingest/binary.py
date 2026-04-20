@@ -25,7 +25,7 @@ class BinaryIngestor(BaseIngestor):
     allowing users to search for references to these files.
     """
 
-    source_type = SourceType.UNKNOWN
+    source_type = SourceType.BINARY
 
     # Supported binary extensions
     SUPPORTED_EXTENSIONS = [

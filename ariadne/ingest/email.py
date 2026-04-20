@@ -30,7 +30,7 @@ class EmailIngestor(BaseIngestor):
         docs = ingestor.ingest("email.eml")
     """
     
-    source_type = SourceType.UNKNOWN
+    source_type = SourceType.EMAIL
     
     def _extract(self, path: Path) -> List[str]:
         """Extract content from email file."""
@@ -195,7 +195,7 @@ class MBOXIngestor(BaseIngestor):
         docs = ingestor.ingest(" mailbox")
     """
     
-    source_type = SourceType.UNKNOWN
+    source_type = SourceType.EMAIL
     
     def _extract(self, path: Path) -> List[str]:
         """Extract all emails from MBOX file."""

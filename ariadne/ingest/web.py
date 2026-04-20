@@ -37,7 +37,7 @@ class WebIngestor(BaseIngestor):
         docs = ingestor.ingest("https://example.com/article")
     """
     
-    source_type = SourceType.UNKNOWN
+    source_type = SourceType.WEB
     
     def __init__(self, timeout: int = 30, user_agent: Optional[str] = None):
         """

@@ -28,7 +28,7 @@ class BibTeXIngestor(BaseIngestor):
         docs = ingestor.ingest("references.bib")
     """
     
-    source_type = SourceType.UNKNOWN
+    source_type = SourceType.ACADEMIC
     
     # BibTeX entry types we recognize
     ENTRY_TYPES = {
@@ -136,7 +136,7 @@ class RISIngestor(BaseIngestor):
         docs = ingestor.ingest("references.ris")
     """
     
-    source_type = SourceType.UNKNOWN
+    source_type = SourceType.ACADEMIC
     
     # Common RIS tags
     TAG_MAP = {

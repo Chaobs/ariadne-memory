@@ -103,6 +103,9 @@ class VectorStore:
     - Collection is auto-created on first add()
     - Documents are de-duplicated by doc_id
     - Supports multiple collections (for multi-memory systems)
+    - **Deferred deletion**: delete_doc() marks IDs for removal; flush_deletes()
+      executes the actual ChromaDB deletion in batch. This avoids SQLite lock
+      contention from frequent small deletions.
 
     ⚠️  ChromaDB's PersistentClient uses *lazy* initialisation for its internal
     HNSW index.  The ``PersistentClient(path)`` constructor always succeeds even
@@ -140,6 +143,9 @@ class VectorStore:
         # ChromaDB only accepts [a-zA-Z0-9._-] — encode non-ASCII names
         self._chroma_collection_name = _safe_collection_name(self.collection_name)
         Path(persist_dir).mkdir(parents=True, exist_ok=True)
+
+        # Deferred deletion queue: IDs marked for deletion but not yet removed
+        self._pending_deletes: list[str] = []
 
         # Try normal initialization; if DB is corrupted, recover automatically
         last_exc = None
@@ -309,8 +315,79 @@ class VectorStore:
 
     def clear(self) -> None:
         """Clear all documents from the store."""
+        self._pending_deletes.clear()  # No need to delete what we're about to wipe
         self._client.delete_collection(name=self._chroma_collection_name)
         self._collection = self._client.get_or_create_collection(
             name=self._chroma_collection_name,
             metadata={"description": f"Ariadne memory: {self.collection_name}"},
         )
+
+    # ── Deferred deletion ──────────────────────────────────────────
+
+    def delete_doc(self, doc_id: str) -> None:
+        """Mark a document for deferred deletion.
+
+        The document is not immediately removed from ChromaDB. Instead, its ID
+        is queued and the actual deletion happens when:
+
+        1. ``flush_deletes()`` is called explicitly
+        2. The number of pending deletes exceeds ``_AUTO_FLUSH_THRESHOLD``
+        3. The store is used as a context manager and the ``with`` block exits
+
+        This avoids frequent small SQLite write locks that can cause
+        ``SQLITE_BUSY`` errors under concurrent access.
+
+        Args:
+            doc_id: The document ID to delete (from ``Document.doc_id``).
+        """
+        if not doc_id:
+            return
+        self._pending_deletes.append(doc_id)
+
+        # Auto-flush when threshold reached
+        if len(self._pending_deletes) >= self._AUTO_FLUSH_THRESHOLD:
+            self.flush_deletes()
+
+    def flush_deletes(self) -> int:
+        """Execute all pending deletions in a single batch operation.
+
+        Returns:
+            Number of documents actually deleted.
+        """
+        if not self._pending_deletes:
+            return 0
+
+        ids_to_delete = list(self._pending_deletes)
+        self._pending_deletes.clear()
+
+        try:
+            self._collection.delete(ids=ids_to_delete)
+            return len(ids_to_delete)
+        except Exception as exc:
+            # Re-queue on failure so we can retry later
+            self._pending_deletes.extend(ids_to_delete)
+            raise RuntimeError(
+                f"Failed to flush {len(ids_to_delete)} pending deletes: {exc}"
+            ) from exc
+
+    @property
+    def pending_delete_count(self) -> int:
+        """Number of documents queued for deferred deletion."""
+        return len(self._pending_deletes)
+
+    # Threshold for auto-flushing pending deletes
+    _AUTO_FLUSH_THRESHOLD = 50
+
+    # ── Context manager ────────────────────────────────────────────
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Flush pending deletes when exiting a ``with`` block."""
+        if self._pending_deletes:
+            try:
+                self.flush_deletes()
+            except Exception:
+                pass  # Best-effort cleanup; don't shadow the original exception
+        return False

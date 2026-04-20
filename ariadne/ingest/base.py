@@ -28,6 +28,16 @@ class SourceType(Enum):
     CODE = "code"
     EXCEL = "excel"
     CSV = "csv"
+    EPUB = "epub"
+    IMAGE = "image"
+    OCR = "ocr"
+    ACADEMIC = "academic"
+    WEB = "web"
+    EMAIL = "email"
+    VIDEO = "video"
+    AUDIO = "audio"
+    BINARY = "binary"
+    MARKITDOWN = "markitdown"
     UNKNOWN = "unknown"
 
 

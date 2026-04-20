@@ -28,7 +28,7 @@ class ImageIngestor(BaseIngestor):
         docs = ingestor.ingest("photo.jpg")
     """
     
-    source_type = SourceType.UNKNOWN
+    source_type = SourceType.IMAGE
     
     def _extract(self, path: Path) -> List[str]:
         """Extract metadata from image file."""
@@ -104,7 +104,7 @@ class OCRIngestor(BaseIngestor):
         docs = ingestor.ingest("scanned.pdf")
     """
     
-    source_type = SourceType.UNKNOWN
+    source_type = SourceType.OCR
     
     def __init__(self, use_rapidocr: bool = True, lang: str = 'eng+chi_sim'):
         """

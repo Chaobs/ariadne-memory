@@ -29,6 +29,9 @@ Supported formats:
         Scanned PDFs and images with text extraction (OCRIngestor)
     URL Support:
         Web pages (WebIngestor)
+    Universal (via markitdown):
+        .html/.htm/.rss/.ipynb/.msg/.rtf/.ods/.odt/.odp/.xml
+        + fallback for any format not covered by native ingestors
 """
 
 from ariadne.ingest.base import BaseIngestor, Document, SourceType
@@ -53,6 +56,9 @@ from ariadne.ingest.media import VideoIngestor, AudioIngestor
 
 # Binary file handler
 from ariadne.ingest.binary import BinaryIngestor
+
+# Universal ingestor via markitdown
+from ariadne.ingest.markitdown_ingestor import MarkItDownIngestor
 
 __all__ = [
     # Base
@@ -83,6 +89,8 @@ __all__ = [
     "AudioIngestor",
     # Binary files
     "BinaryIngestor",
+    # Universal (markitdown)
+    "MarkItDownIngestor",
     # Factory function
     "get_ingestor",
 ]
@@ -91,6 +99,13 @@ __all__ = [
 def get_ingestor(source: str) -> BaseIngestor:
     """
     Factory function to get the appropriate ingestor for a source.
+
+    Resolution priority:
+    1. URL → WebIngestor
+    2. Extension with a native ingestor → that ingestor
+    3. Extension in markitdown's preferred set → MarkItDownIngestor
+    4. Extension in markitdown's fallback set → try native first, then markitdown
+    5. Unknown extension → MarkItDownIngestor (if available), else BinaryIngestor
 
     Args:
         source: File path, URL, or other source identifier
@@ -102,6 +117,9 @@ def get_ingestor(source: str) -> BaseIngestor:
         ValueError: If no ingestor found for the source type
     """
     from pathlib import Path
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     source_lower = source.lower()
 
@@ -113,7 +131,7 @@ def get_ingestor(source: str) -> BaseIngestor:
     path = Path(source)
     ext = path.suffix.lower() if path.suffix else ""
 
-    # Extension-based mapping
+    # Native ingestors — format-specific logic (tried first)
     EXTENSION_MAP = {
         ".md": MarkdownIngestor,
         ".markdown": MarkdownIngestor,
@@ -171,5 +189,37 @@ def get_ingestor(source: str) -> BaseIngestor:
     if ext in EXTENSION_MAP:
         return EXTENSION_MAP[ext]()
 
-    # Fallback to binary ingestor for unknown types
-    return BinaryIngestor()
+    # Markitdown preferred extensions — formats with no native ingestor
+    MARKITDOWN_PREFERRED = {
+        ".html", ".htm", ".rss", ".ipynb", ".msg", ".rtf",
+        ".ods", ".odt", ".odp", ".xml", ".htm",
+    }
+
+    if ext in MARKITDOWN_PREFERRED:
+        try:
+            return MarkItDownIngestor()
+        except ImportError:
+            logger.warning(
+                f"markitdown not installed; falling back to BinaryIngestor for {ext}"
+            )
+            return BinaryIngestor()
+
+    # Markitdown fallback extensions — try markitdown if native fails
+    MARKITDOWN_FALLBACK = {
+        ".pdf", ".docx", ".pptx", ".xlsx", ".xls", ".csv",
+        ".epub", ".txt", ".md",
+    }
+
+    if ext in MARKITDOWN_FALLBACK:
+        # Native ingestor should have matched above, but if we got here
+        # it means the extension wasn't in EXTENSION_MAP. Try markitdown.
+        try:
+            return MarkItDownIngestor()
+        except ImportError:
+            return BinaryIngestor()
+
+    # Unknown extension — try markitdown first, then binary
+    try:
+        return MarkItDownIngestor()
+    except ImportError:
+        return BinaryIngestor()

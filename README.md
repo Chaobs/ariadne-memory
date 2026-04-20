@@ -37,13 +37,15 @@
 | 💾 **记忆导出/导入** | 支持将记忆系统导出为目录或从目录导入（备份与分享） | ✅ |
 | 📚 **媒体支持** | EPUB/MOBI 电子书、图片 OCR、扫描 PDF、学术文献元数据 | ✅ |
 | 🔌 **MCP Server** | 提供 MCP 工具接口，可接入 Claude Code / WorkBuddy / Cursor | ✅ |
-| 🖥️ **双入口** | CLI 和 GUI 两种界面，支持所有相同功能 | ✅ |
+| 🖥️ **双入口** | CLI（Typer + Rich）和 GUI 两种界面，支持所有相同功能 | ✅ |
 | 🌍 **多语言** | 支持 8 种语言（中文简繁体、日语、英、法、西、俄、阿） | ✅ |
 | 📝 **智能摘要** | LLM 驱动的多语言摘要生成，支持指定输出语言 | ✅ |
 | 📊 **可视化** | 知识图谱交互式可视化（HTML / DOT / Mermaid） | ✅ |
 | 📤 **多格式导出** | 支持 Markdown、HTML、Word、PDF 格式导出 | ✅ |
 | 📦 **本地化依赖** | 第三方库本地化，版本一致性好 | ✅ |
 | 🎯 **二进制支持** | 自动处理二进制文件，提取文件名作为知识引用 | ✅ |
+| 🔄 **通用摄入** | 通过 markitdown 支持 HTML/RSS/Jupyter/RTF/ODF 等 22+ 格式 | ✅ |
+| ⏱️ **延迟删除** | 标记-批量删除机制，避免 SQLite 锁争用 | ✅ |
 
 ---
 
@@ -83,6 +85,18 @@
 | 格式 | 扩展名 | 摄入器 | 处理方式 |
 |------|--------|--------|----------|
 | 二进制 | `.exe`, `.dll`, `.so`, `.dylib`, `.bin`, `.dat`, `.iso`, `.apk`, `.ipa` 等 | `BinaryIngestor` | 提取文件名、大小、类型作为元数据引用 |
+
+### 通用格式 (via markitdown)
+
+| 格式 | 扩展名 | 摄入器 | 处理方式 |
+|------|--------|--------|----------|
+| HTML | `.html`, `.htm` | `MarkItDownIngestor` | 转换为 Markdown 后语义切分 |
+| RSS | `.rss`, `.xml` | `MarkItDownIngestor` | RSS/Atom Feed 解析 |
+| Jupyter | `.ipynb` | `MarkItDownIngestor` | 代码+输出 Markdown 转换 |
+| Outlook | `.msg` | `MarkItDownIngestor` | MSG 邮件内容提取 |
+| RTF | `.rtf` | `MarkItDownIngestor` | 富文本格式转换 |
+| ODF | `.ods`, `.odt`, `.odp` | `MarkItDownIngestor` | OpenDocument 格式转换 |
+| 其他 | 任何未匹配格式 | `MarkItDownIngestor` | 自动尝试 markitdown 转换 |
 
 ---
 

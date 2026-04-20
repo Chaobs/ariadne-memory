@@ -31,7 +31,7 @@ class VideoIngestor(BaseIngestor):
         docs = ingestor.ingest("lecture.mp4")
     """
     
-    source_type = SourceType.UNKNOWN
+    source_type = SourceType.VIDEO
     
     def __init__(self, extract_subtitles: bool = True, transcribe: bool = False):
         """
@@ -236,7 +236,7 @@ class AudioIngestor(BaseIngestor):
         docs = ingestor.ingest("podcast.mp3")
     """
     
-    source_type = SourceType.UNKNOWN
+    source_type = SourceType.AUDIO
     
     def __init__(self, transcribe: bool = False):
         """

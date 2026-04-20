@@ -1,50 +1,33 @@
 """
-Ariadne CLI — Command-line interface for the Ariadne memory system.
+Ariadne CLI — Modern command-line interface powered by Typer.
 
 Supports:
 - Single and multi-memory system operations
-- File ingestion with progress
+- File ingestion with progress (Rich)
 - Semantic search
 - Memory system management (create, rename, delete, merge)
 - LLM configuration and testing
 - Advanced features (summary, graph, export)
+
+Built with Typer (type-hint driven) + Rich (beautiful terminal output).
 """
 
-import click
 import sys
 import os
 from pathlib import Path
+from typing import Optional, List
 
-try:
-    from colorama import Fore, init as colorama_init
-    colorama_init(autoreset=True)
-except ImportError:
-    class Fore:
-        RED = "\033[91m"
-        GREEN = "\033[92m"
-        YELLOW = "\033[93m"
-        CYAN = "\033[96m"
-        RESET = "\033[0m"
-
-try:
-    from tqdm import tqdm
-except ImportError:
-    tqdm = None  # Progress bar disabled if tqdm not installed
+import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+from rich.text import Text
 
 from ariadne import __version__
 from ariadne.memory import VectorStore, MemoryManager, get_manager
-from ariadne.ingest import (
-    MarkdownIngestor,
-    WordIngestor,
-    PPTIngestor,
-    PDFIngestor,
-    TxtIngestor,
-    ConversationIngestor,
-    MindMapIngestor,
-    CodeIngestor,
-    ExcelIngestor,
-    CsvIngestor,
-)
+from ariadne.ingest import get_ingestor
+from ariadne.ingest.markitdown_ingestor import MarkItDownIngestor
 from ariadne.config import (
     AriadneConfig,
     get_config,
@@ -53,232 +36,279 @@ from ariadne.config import (
     list_supported_providers,
 )
 
-INGESTORS = {
-    ".md": MarkdownIngestor,
-    ".docx": WordIngestor,
-    ".pptx": PPTIngestor,
-    ".pdf": PDFIngestor,
-    ".txt": TxtIngestor,
-    ".mm": MindMapIngestor,
-    ".xmind": MindMapIngestor,
-    ".py": CodeIngestor,
-    ".java": CodeIngestor,
-    ".cpp": CodeIngestor,
-    ".c": CodeIngestor,
-    ".js": CodeIngestor,
-    ".ts": CodeIngestor,
-    ".xlsx": ExcelIngestor,
-    ".xls": ExcelIngestor,
-    ".csv": CsvIngestor,
+# Rich console for styled output
+console = Console()
+
+# Supported extensions for directory scanning
+SCAN_EXTENSIONS = {
+    ".md", ".markdown", ".txt", ".pdf", ".docx", ".pptx",
+    ".xlsx", ".xls", ".csv", ".json",
+    ".mm", ".xmind",
+    ".py", ".java", ".cpp", ".c", ".h", ".hpp",
+    ".js", ".ts", ".jsx", ".tsx", ".cs", ".go", ".rs", ".rb",
+    ".php", ".swift", ".kt", ".scala",
+    ".epub", ".bib", ".ris",
+    ".eml", ".mbox",
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp",
+    ".mp4", ".avi", ".mkv", ".mov",
+    ".mp3", ".wav", ".m4a", ".flac", ".ogg",
+    # markitdown-supported
+    ".html", ".htm", ".rss", ".ipynb", ".msg", ".rtf",
+    ".ods", ".odt", ".odp", ".xml",
 }
 
 
 def resolve_ingestor(path: Path):
-    suffix = path.suffix.lower()
-    for ext, cls in INGESTORS.items():
-        if suffix == ext:
-            return cls()
-    return None
+    """Resolve an ingestor for the given file path using the unified factory."""
+    try:
+        return get_ingestor(str(path))
+    except (ValueError, ImportError):
+        return None
 
 
-@click.group()
-@click.version_option(version=__version__)
-def main():
+# ═══════════════════════════════════════════
+# Main app
+# ═══════════════════════════════════════════
+
+app = typer.Typer(
+    name="ariadne",
+    help="Ariadne — Cross-Source AI Memory & Knowledge Weaving System.",
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
+
+memory_app = typer.Typer(help="Memory system management commands.")
+app.add_typer(memory_app, name="memory")
+
+config_app = typer.Typer(help="Configuration management commands.")
+app.add_typer(config_app, name="config")
+
+advanced_app = typer.Typer(help="Advanced features (requires LLM configuration).")
+app.add_typer(advanced_app, name="advanced")
+
+
+def version_callback(value: bool):
+    if value:
+        console.print(f"Ariadne v{__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main_callback(
+    version: bool = typer.Option(
+        None, "--version", "-v", help="Show version and exit.",
+        callback=version_callback, is_eager=True,
+    ),
+):
     """Ariadne — Cross-Source AI Memory & Knowledge Weaving System."""
-    pass
 
 
-# === Memory System Management ===
+# ═══════════════════════════════════════════
+# Memory System Management
+# ═══════════════════════════════════════════
 
-@main.group()
-def memory():
-    """Memory system management commands."""
-    pass
-
-
-@memory.command("list")
+@memory_app.command("list")
 def memory_list():
     """List all memory systems."""
     manager = get_manager()
     systems = manager.list_systems()
-    
-    click.secho("\nAll Memory Systems:", fg="cyan")
-    click.secho("="*50)
-    
+
+    table = Table(title="Memory Systems", show_lines=False)
+    table.add_column("Default", style="bold cyan", width=3)
+    table.add_column("Name", style="green")
+    table.add_column("Documents", justify="right", style="yellow")
+    table.add_column("Description", style="dim")
+
     for s in systems:
         info = manager.get_info(s.name)
-        count = info.get("document_count", "?") if info else "?"
-        marker = " * " if s.name == manager.DEFAULT_COLLECTION else "   "
-        click.echo(f"{marker}{s.name}: {count} documents")
-        if s.description:
-            click.echo(f"    {s.description}")
-    
-    click.secho(f"\nTotal: {len(systems)} memory system(s)")
+        count = str(info.get("document_count", "?")) if info else "?"
+        marker = "★" if s.name == manager.DEFAULT_COLLECTION else ""
+        desc = s.description or ""
+        table.add_row(marker, s.name, count, desc)
+
+    console.print(table)
+    console.print(f"Total: [bold]{len(systems)}[/bold] memory system(s)")
 
 
-@memory.command("create")
-@click.argument("name")
-@click.option("--description", "-d", default="", help="Description for the memory system")
-def memory_create(name: str, description: str):
+@memory_app.command("create")
+def memory_create(
+    name: str = typer.Argument(..., help="Name for the new memory system"),
+    description: str = typer.Option("", "--description", "-d", help="Description"),
+):
     """Create a new memory system."""
     manager = get_manager()
     try:
         manager.create(name, description)
-        click.secho(f"[OK] Created: {name}", fg="green")
+        console.print(f"[bold green][OK][/bold green] Created: {name}")
     except ValueError as e:
-        click.secho(f"[ERROR] {e}", fg="red")
-        sys.exit(1)
+        console.print(f"[bold red][ERROR][/bold red] {e}")
+        raise typer.Exit(1)
 
 
-@memory.command("rename")
-@click.argument("old_name")
-@click.argument("new_name")
-def memory_rename(old_name: str, new_name: str):
+@memory_app.command("rename")
+def memory_rename(
+    old_name: str = typer.Argument(..., help="Current name"),
+    new_name: str = typer.Argument(..., help="New name"),
+):
     """Rename a memory system."""
     manager = get_manager()
     try:
         manager.rename(old_name, new_name)
-        click.secho(f"[OK] Renamed: {old_name} -> {new_name}", fg="green")
+        console.print(f"[bold green][OK][/bold green] Renamed: {old_name} → {new_name}")
     except ValueError as e:
-        click.secho(f"[ERROR] {e}", fg="red")
-        sys.exit(1)
+        console.print(f"[bold red][ERROR][/bold red] {e}")
+        raise typer.Exit(1)
 
 
-@memory.command("delete")
-@click.argument("name")
-@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
-def memory_delete(name: str, yes: bool):
+@memory_app.command("delete")
+def memory_delete(
+    name: str = typer.Argument(..., help="Memory system to delete"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+):
     """Delete a memory system."""
     manager = get_manager()
-    
+
     if name == manager.DEFAULT_COLLECTION:
-        click.secho("[ERROR] Cannot delete the default memory system", fg="red")
-        sys.exit(1)
-    
+        console.print("[bold red][ERROR][/bold red] Cannot delete the default memory system")
+        raise typer.Exit(1)
+
     if not yes:
-        click.confirm(f"Delete '{name}'? This cannot be undone.", abort=True)
-    
+        confirm = typer.confirm(f"Delete '{name}'? This cannot be undone.")
+        if not confirm:
+            raise typer.Abort()
+
     try:
         manager.delete(name, confirm=False)
-        click.secho(f"[OK] Deleted: {name}", fg="green")
+        console.print(f"[bold green][OK][/bold green] Deleted: {name}")
     except ValueError as e:
-        click.secho(f"[ERROR] {e}", fg="red")
-        sys.exit(1)
+        console.print(f"[bold red][ERROR][/bold red] {e}")
+        raise typer.Exit(1)
 
 
-@memory.command("merge")
-@click.argument("source_names", nargs=-1, required=True)
-@click.argument("new_name")
-@click.option("--delete", "-d", is_flag=True, help="Delete source systems after merge")
-def memory_merge(source_names: tuple, new_name: str, delete: bool):
-    """Merge multiple memory systems into a new one."""
+@memory_app.command("merge")
+def memory_merge(
+    source_names: List[str] = typer.Argument(..., help="Source memory systems to merge"),
+    new_name: str = typer.Option(..., "--into", help="Name for the merged system"),
+    delete_sources: bool = typer.Option(False, "--delete", "-d", help="Delete sources after merge"),
+):
+    """Merge multiple memory systems into a new one.
+
+    Example:
+        ariadne memory merge research notes --into combined
+    """
     manager = get_manager()
-    
-    sources = list(source_names)
     try:
-        manager.merge(sources, new_name, delete_sources=delete)
-        click.secho(f"[OK] Merged into: {new_name}", fg="green")
+        manager.merge(source_names, new_name, delete_sources=delete_sources)
+        console.print(f"[bold green][OK][/bold green] Merged into: {new_name}")
     except ValueError as e:
-        click.secho(f"[ERROR] {e}", fg="red")
-        sys.exit(1)
+        console.print(f"[bold red][ERROR][/bold red] {e}")
+        raise typer.Exit(1)
 
 
-@memory.command("info")
-@click.argument("name", required=False)
-def memory_info(name: str):
+@memory_app.command("info")
+def memory_info(
+    name: Optional[str] = typer.Argument(None, help="Memory system name (default if omitted)"),
+):
     """Show information about a memory system."""
     manager = get_manager()
-    
+
     if name is None:
         name = manager.DEFAULT_COLLECTION
-    
+
     info = manager.get_info(name)
     if not info:
-        click.secho(f"[ERROR] Memory system '{name}' not found", fg="red")
-        sys.exit(1)
-    
-    click.secho(f"\nMemory System: {name}", fg="cyan")
-    click.secho("="*50)
-    click.echo(f"Path: {info['path']}")
-    click.echo(f"Documents: {info.get('document_count', 0)}")
-    click.echo(f"Created: {info.get('created_at', 'N/A')[:10]}")
-    click.echo(f"Updated: {info.get('updated_at', 'N/A')[:10]}")
+        console.print(f"[bold red][ERROR][/bold red] Memory system '{name}' not found")
+        raise typer.Exit(1)
+
+    panel_content = Text()
+    panel_content.append(f"Path:        {info['path']}\n")
+    panel_content.append(f"Documents:   {info.get('document_count', 0)}\n")
+    panel_content.append(f"Created:     {info.get('created_at', 'N/A')[:10]}\n")
+    panel_content.append(f"Updated:     {info.get('updated_at', 'N/A')[:10]}\n")
     if info.get('description'):
-        click.echo(f"Description: {info['description']}")
+        panel_content.append(f"Description: {info['description']}\n")
+
+    console.print(Panel(panel_content, title=f"[cyan]{name}[/cyan]", border_style="cyan"))
 
 
-@memory.command("clear")
-@click.argument("name", required=False)
-@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
-def memory_clear(name: str, yes: bool):
+@memory_app.command("clear")
+def memory_clear(
+    name: Optional[str] = typer.Argument(None, help="Memory system name (default if omitted)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+):
     """Clear all documents from a memory system."""
     manager = get_manager()
-    
+
     if name is None:
         name = manager.DEFAULT_COLLECTION
-    
+
     if not yes:
-        click.confirm(f"Clear all documents from '{name}'?", abort=True)
-    
+        confirm = typer.confirm(f"Clear all documents from '{name}'?")
+        if not confirm:
+            raise typer.Abort()
+
     try:
         manager.clear(name)
-        click.secho(f"[OK] Cleared: {name}", fg="green")
+        console.print(f"[bold green][OK][/bold green] Cleared: {name}")
     except Exception as e:
-        click.secho(f"[ERROR] {e}", fg="red")
-        sys.exit(1)
+        console.print(f"[bold red][ERROR][/bold red] {e}")
+        raise typer.Exit(1)
 
 
-@memory.command("export")
-@click.argument("name")
-@click.argument("output_path", type=click.Path())
-def memory_export(name: str, output_path: str):
+@memory_app.command("export")
+def memory_export(
+    name: str = typer.Argument(..., help="Memory system to export"),
+    output_path: str = typer.Argument(..., help="Output directory path"),
+):
     """Export a memory system to a directory (for backup or sharing).
-    
+
     Example:
         ariadne memory export research ./backup/research_memory
     """
     manager = get_manager()
-    
     try:
         path = manager.export(name, output_path)
-        click.secho(f"[OK] Exported '{name}' to: {path}", fg="green")
+        console.print(f"[bold green][OK][/bold green] Exported '{name}' to: {path}")
     except ValueError as e:
-        click.secho(f"[ERROR] {e}", fg="red")
-        sys.exit(1)
+        console.print(f"[bold red][ERROR][/bold red] {e}")
+        raise typer.Exit(1)
 
 
-@memory.command("import")
-@click.argument("source_path", type=click.Path(exists=True))
-@click.argument("name")
-def memory_import(source_path: str, name: str):
+@memory_app.command("import")
+def memory_import(
+    source_path: str = typer.Argument(..., help="Source directory path", exists=True),
+    name: str = typer.Argument(..., help="Name for the imported memory system"),
+):
     """Import a memory system from a previously exported directory.
-    
+
     Example:
         ariadne memory import ./backup/research_memory imported_research
     """
     manager = get_manager()
-    
     try:
         manager.import_memory(source_path, name)
-        click.secho(f"[OK] Imported '{source_path}' as: {name}", fg="green")
+        console.print(f"[bold green][OK][/bold green] Imported '{source_path}' as: {name}")
     except ValueError as e:
-        click.secho(f"[ERROR] {e}", fg="red")
-        sys.exit(1)
+        console.print(f"[bold red][ERROR][/bold red] {e}")
+        raise typer.Exit(1)
 
 
-# === File Ingestion ===
+# ═══════════════════════════════════════════
+# File Ingestion
+# ═══════════════════════════════════════════
 
-@main.command()
-@click.argument("path", type=click.Path(exists=True))
-@click.option("--recursive", "-r", is_flag=True, help="Recursively ingest all supported files")
-@click.option("--verbose", "-v", is_flag=True, help="Show detailed output")
-@click.option("--batch-size", "-b", default=100, help="Batch size for vector storage")
-@click.option("--memory", "-m", default=None, help="Target memory system name")
-def ingest(path: str, recursive: bool, verbose: bool, batch_size: int, memory: str):
+@app.command()
+def ingest(
+    path: str = typer.Argument(..., help="File or directory to ingest", exists=True),
+    recursive: bool = typer.Option(False, "--recursive", "-r", help="Recursively ingest all supported files"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
+    batch_size: int = typer.Option(100, "--batch-size", "-b", help="Batch size for vector storage"),
+    memory: Optional[str] = typer.Option(None, "--memory", "-m", help="Target memory system name"),
+):
     """Ingest a file or directory into a memory system."""
     manager = get_manager()
     store = manager.get_store(memory)
-    
+
     target = Path(path)
     files_processed = 0
     docs_created = 0
@@ -288,166 +318,188 @@ def ingest(path: str, recursive: bool, verbose: bool, batch_size: int, memory: s
         files = [target]
     elif target.is_dir():
         files = []
-        for ext in INGESTORS:
+        for ext in SCAN_EXTENSIONS:
             if recursive:
                 files.extend(target.rglob(f"*{ext}"))
             else:
                 files.extend(target.glob(f"*{ext}"))
     else:
-        click.secho(f"Error: {path} is not a valid file or directory", fg="red")
-        sys.exit(1)
+        console.print(f"[bold red]Error:[/bold red] {path} is not a valid file or directory")
+        raise typer.Exit(1)
 
     if not files:
-        click.secho("No supported files found.", fg="yellow")
+        console.print("[yellow]No supported files found.[/yellow]")
         return
-    
-    target_system = memory or manager.DEFAULT_COLLECTION
-    click.echo(f"Target: {target_system}")
 
-    # Batch accumulation for progress bar
+    target_system = memory or manager.DEFAULT_COLLECTION
+    console.print(f"Target: [cyan]{target_system}[/cyan]")
+
     batch_docs = []
 
-    # Create progress bar if tqdm is available
-    iterator = tqdm(files, desc="Ingesting", unit="file", disable=tqdm is None)
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Ingesting...", total=len(files))
 
-    for file_path in iterator:
-        ingestor_cls = resolve_ingestor(file_path)
-        if ingestor_cls is None:
-            if verbose:
-                click.echo(f"  {Fore.YELLOW}SKIP{Fore.RESET}  {file_path} (unsupported format)")
-            continue
-
-        try:
-            ingestor = ingestor_cls()
-            docs = ingestor.ingest(str(file_path))
-            if docs:
-                batch_docs.extend(docs)
-                files_processed += 1
-                docs_created += len(docs)
-
-                # Flush batch when full
-                if len(batch_docs) >= batch_size:
-                    store.add(batch_docs)
-                    batch_docs = []
-
+        for file_path in files:
+            ingestor = resolve_ingestor(file_path)
+            if ingestor is None:
                 if verbose:
-                    click.echo(f"  {Fore.GREEN}ADD{Fore.RESET}   {file_path.name} -> {len(docs)} chunks")
-        except Exception as e:
-            errors.append((str(file_path), str(e)))
-            if verbose:
-                click.echo(f"  {Fore.RED}ERROR{Fore.RESET}  {file_path.name}: {e}")
+                    console.print(f"  [yellow]SKIP[/yellow]  {file_path} (unsupported format)")
+                progress.advance(task)
+                continue
+
+            try:
+                docs = ingestor.ingest(str(file_path))
+                if docs:
+                    batch_docs.extend(docs)
+                    files_processed += 1
+                    docs_created += len(docs)
+
+                    if len(batch_docs) >= batch_size:
+                        store.add(batch_docs)
+                        batch_docs = []
+
+                    if verbose:
+                        console.print(f"  [green]ADD[/green]   {file_path.name} → {len(docs)} chunks")
+            except Exception as e:
+                errors.append((str(file_path), str(e)))
+                if verbose:
+                    console.print(f"  [red]ERROR[/red]  {file_path.name}: {e}")
+
+            progress.advance(task)
 
     # Flush remaining docs
     if batch_docs:
         store.add(batch_docs)
 
     # Summary
-    click.secho(f"\n{'='*50}", fg="cyan")
-    click.secho(f"Done! Processed {files_processed} files, created {docs_created} documents.", fg="green")
-    if errors:
-        click.secho(f"Errors: {len(errors)}", fg="red")
-        if verbose:
-            for path, err in errors:
-                click.echo(f"  - {path}: {err}")
+    console.print()
+    console.print(Panel(
+        f"Processed [bold green]{files_processed}[/bold green] files, "
+        f"created [bold green]{docs_created}[/bold green] documents."
+        + (f"\n[red]Errors: {len(errors)}[/red]" if errors else ""),
+        title="Ingest Complete",
+        border_style="green" if not errors else "yellow",
+    ))
+
+    if errors and verbose:
+        for err_path, err_msg in errors:
+            console.print(f"  [dim]- {err_path}: {err_msg}[/dim]")
 
 
-# === Search ===
+# ═══════════════════════════════════════════
+# Search
+# ═══════════════════════════════════════════
 
-@main.command()
-@click.argument("query", type=str)
-@click.option("--top-k", "-k", default=5, help="Number of results to return")
-@click.option("--verbose", "-v", is_flag=True, help="Show document metadata")
-@click.option("--memory", "-m", default=None, help="Target memory system name")
-def search(query: str, top_k: int, verbose: bool, memory: str):
+@app.command()
+def search(
+    query: str = typer.Argument(..., help="Search query"),
+    top_k: int = typer.Option(5, "--top-k", "-k", help="Number of results"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show document metadata"),
+    memory: Optional[str] = typer.Option(None, "--memory", "-m", help="Target memory system"),
+):
     """Search a memory system."""
     manager = get_manager()
     store = manager.get_store(memory)
     results = store.search(query, top_k=top_k)
 
     if not results:
-        click.secho("No results found.", fg="yellow")
+        console.print("[yellow]No results found.[/yellow]")
         return
 
     target_system = memory or manager.DEFAULT_COLLECTION
-    click.secho(f"\n[Memory: {target_system}] Found {len(results)} results:\n", fg="green")
-    
+    console.print(f"\n[Memory: [cyan]{target_system}[/cyan]] Found [bold green]{len(results)}[/bold green] results:\n")
+
     for i, (doc, score) in enumerate(results, 1):
-        click.secho(f"[{i}] (score: {score:.4f})", fg="cyan")
-        click.echo(doc.content[:300])
+        # Truncate content for display
+        content_preview = doc.content[:300].replace("\n", " ")
+        console.print(f"[{i}] [dim](score: {score:.4f})[/dim]")
+        console.print(f"  {content_preview}")
         if verbose and doc.metadata:
-            click.echo(f"    Source: {doc.metadata.get('source', 'unknown')} | "
-                       f"Type: {doc.metadata.get('source_type', 'unknown')}")
-        click.echo()
+            src = doc.metadata.get("source", "unknown")
+            stype = doc.metadata.get("source_type", "unknown")
+            console.print(f"  [dim]Source: {src} | Type: {stype}[/dim]")
+        console.print()
 
 
-# === Info ===
+# ═══════════════════════════════════════════
+# Info
+# ═══════════════════════════════════════════
 
-@main.command()
-@click.option("--stats", is_flag=True, help="Show collection statistics")
-@click.option("--memory", "-m", default=None, help="Target memory system name")
-def info(stats: bool, memory: str):
+@app.command()
+def info(
+    stats: bool = typer.Option(False, "--stats", help="Show collection statistics"),
+    memory: Optional[str] = typer.Option(None, "--memory", "-m", help="Target memory system"),
+):
     """Show information about the Ariadne memory system."""
     manager = get_manager()
     target = memory or manager.DEFAULT_COLLECTION
     store = manager.get_store(target)
-    
-    click.echo(f"Ariadne Memory System v{__version__}")
-    click.echo(f"Current Memory: {target}")
-    click.echo(f"Storage backend: ChromaDB")
-    click.echo(f"Data directory: {store.persist_dir}")
+
+    info_text = Text()
+    info_text.append(f"Ariadne Memory System v{__version__}\n")
+    info_text.append(f"Current Memory:  {target}\n")
+    info_text.append(f"Storage backend: ChromaDB\n")
+    info_text.append(f"Data directory:  {store.persist_dir}\n")
 
     if stats:
         try:
             count = store.count()
-            click.echo(f"Documents indexed: {count}")
+            info_text.append(f"Documents indexed: {count}\n")
         except Exception:
-            click.echo("Documents indexed: (unable to retrieve)")
+            info_text.append("Documents indexed: (unable to retrieve)\n")
+
+    console.print(Panel(info_text, border_style="cyan"))
 
 
-# === GUI ===
+# ═══════════════════════════════════════════
+# GUI
+# ═══════════════════════════════════════════
 
-@main.command()
+@app.command()
 def gui():
     """Launch the graphical user interface."""
     try:
         from ariadne.gui import main as gui_main
         gui_main()
     except ImportError:
-        click.secho("Error: tkinter is not available on this system.", fg="red")
-        click.secho("GUI requires a graphical environment (Windows/macOS/Linux desktop).", fg="yellow")
-        sys.exit(1)
+        console.print("[bold red]Error:[/bold red] tkinter is not available on this system.")
+        console.print("[yellow]GUI requires a graphical environment (Windows/macOS/Linux desktop).[/yellow]")
+        raise typer.Exit(1)
     except Exception as e:
-        click.secho(f"Error launching GUI: {e}", fg="red")
-        sys.exit(1)
+        console.print(f"[bold red]Error launching GUI:[/bold red] {e}")
+        raise typer.Exit(1)
 
 
-# === Config Management ===
+# ═══════════════════════════════════════════
+# Config Management
+# ═══════════════════════════════════════════
 
-@main.group()
-def config():
-    """Configuration management commands."""
-    pass
-
-
-@config.command("show")
+@config_app.command("show")
 def config_show():
     """Show current configuration."""
     cfg = get_config()
     print_config_info(cfg)
 
 
-@config.command("list-providers")
+@config_app.command("list-providers")
 def config_list_providers():
     """List all supported LLM providers."""
     list_supported_providers()
 
 
-@config.command("set")
-@click.argument("key")
-@click.argument("value")
-def config_set(key: str, value: str):
+@config_app.command("set")
+def config_set(
+    key: str = typer.Argument(..., help="Configuration key (e.g. llm.provider)"),
+    value: str = typer.Argument(..., help="Configuration value"),
+):
     """Set a configuration value.
-    
+
     Examples:
         ariadne config set llm.provider deepseek
         ariadne config set llm.model deepseek-chat
@@ -455,7 +507,7 @@ def config_set(key: str, value: str):
         ariadne config set advanced.enable_reranker true
     """
     cfg = get_config()
-    
+
     # Convert value type
     if value.lower() in ("true", "false"):
         value = value.lower() == "true"
@@ -463,119 +515,119 @@ def config_set(key: str, value: str):
         value = int(value)
     elif value.replace(".", "", 1).isdigit():
         value = float(value)
-    
+
     cfg.set(key, value)
     cfg.save_user()
-    
-    click.secho(f"[OK] Set {key} = {value}", fg="green")
-    click.echo(f"Config saved to: {cfg.config_dir / 'config.json'}")
+
+    console.print(f"[bold green][OK][/bold green] Set {key} = {value}")
+    console.print(f"Config saved to: {cfg.config_dir / 'config.json'}")
 
 
-@config.command("get")
-@click.argument("key")
-def config_get(key: str):
+@config_app.command("get")
+def config_get(
+    key: str = typer.Argument(..., help="Configuration key"),
+):
     """Get a configuration value."""
     cfg = get_config()
     value = cfg.get(key)
     if value is not None:
-        click.echo(f"{key} = {value}")
+        console.print(f"{key} = {value}")
     else:
-        click.secho(f"Key '{key}' not found", fg="yellow")
+        console.print(f"[yellow]Key '{key}' not found[/yellow]")
 
 
-@config.command("test")
+@config_app.command("test")
 def config_test():
     """Test LLM configuration."""
     cfg = get_config()
-    
-    click.echo("Testing LLM configuration...")
-    success, message = cfg.test_llm()
-    
+
+    with console.status("Testing LLM configuration..."):
+        success, message = cfg.test_llm()
+
     if success:
-        click.secho(f"[OK] {message}", fg="green")
+        console.print(f"[bold green][OK][/bold green] {message}")
     else:
-        click.secho(f"[FAIL] {message}", fg="red")
-        sys.exit(1)
+        console.print(f"[bold red][FAIL][/bold red] {message}")
+        raise typer.Exit(1)
 
 
-@config.command("set-api-key")
-@click.argument("provider")
-@click.argument("api_key")
-@click.option("--env", "-e", is_flag=True, help="Save to environment variable instead of config file")
-def config_set_api_key(provider: str, api_key: str, env: bool):
+@config_app.command("set-api-key")
+def config_set_api_key(
+    provider: str = typer.Argument(..., help="LLM provider name"),
+    api_key: str = typer.Argument(..., help="API key"),
+    env: bool = typer.Option(False, "--env", "-e", help="Save to environment variable instead of config"),
+):
     """Set API key for a provider.
-    
+
     Examples:
         ariadne config set-api-key deepseek sk-xxxxx
         ariadne config set-api-key openai sk-xxxxx -e
     """
     provider = provider.lower()
-    
+
     if env:
         env_var = f"{provider.upper()}_API_KEY"
         os.environ[env_var] = api_key
-        click.secho(f"[OK] Set {env_var} (will apply for this session)", fg="green")
+        console.print(f"[bold green][OK][/bold green] Set {env_var} (will apply for this session)")
     else:
         cfg = get_config()
         cfg.set("llm.provider", provider)
         cfg.set("llm.api_key", api_key)
         cfg.save_user()
-        
+
         config_path = cfg.save_user()
-        click.secho(f"[OK] Set API key for {provider}", fg="green")
-        click.echo(f"Config saved to: {config_path}")
+        console.print(f"[bold green][OK][/bold green] Set API key for {provider}")
+        console.print(f"Config saved to: {config_path}")
 
 
-# === Advanced Features ===
+# ═══════════════════════════════════════════
+# Advanced Features
+# ═══════════════════════════════════════════
 
-@main.group()
-def advanced():
-    """Advanced features commands (requires LLM configuration)."""
-    pass
-
-
-@advanced.command("summarize")
-@click.argument("query", required=False)
-@click.option("--memory", "-m", default=None, help="Target memory system name")
-@click.option("--output-lang", "-l", default=None, help="Output language (zh_CN, en, fr, etc.)")
-def advanced_summarize(query: str, memory: str, output_lang: str):
+@advanced_app.command("summarize")
+def advanced_summarize(
+    query: Optional[str] = typer.Argument(None, help="Search query to summarize"),
+    memory: Optional[str] = typer.Option(None, "--memory", "-m", help="Target memory system"),
+    output_lang: Optional[str] = typer.Option(None, "--output-lang", "-l", help="Output language (zh_CN, en, fr, etc.)"),
+):
     """Summarize search results or entire memory.
-    
+
     Examples:
         ariadne advanced summarize
         ariadne advanced summarize "machine learning"
         ariadne advanced summarize -m research -l en
     """
     cfg = get_config()
-    
+
     if not cfg.get("advanced.enable_summary"):
-        click.secho("Summary feature is disabled. Enable with: ariadne config set advanced.enable_summary true", fg="yellow")
-        sys.exit(1)
-    
+        console.print("[yellow]Summary feature is disabled. Enable with:[/yellow]")
+        console.print("  ariadne config set advanced.enable_summary true")
+        raise typer.Exit(1)
+
     llm = cfg.create_llm()
     if llm is None:
-        click.secho("No LLM configured. Please set up your API key first.", fg="red")
-        click.echo("Run 'ariadne config set-api-key <provider> <key>' to configure.")
-        sys.exit(1)
-    
+        console.print("[bold red]No LLM configured.[/bold red] Please set up your API key first.")
+        console.print("Run 'ariadne config set-api-key <provider> <key>' to configure.")
+        raise typer.Exit(1)
+
     manager = get_manager()
     store = manager.get_store(memory)
     target = memory or manager.DEFAULT_COLLECTION
-    
+
     if query:
-        click.echo(f"Searching memory '{target}' for: {query}")
+        console.print(f"Searching memory '[cyan]{target}[/cyan]' for: {query}")
         results = store.search(query, top_k=10)
-        
+
         if not results:
-            click.secho("No results found.", fg="yellow")
+            console.print("[yellow]No results found.[/yellow]")
             return
-        
-        click.echo(f"Found {len(results)} results, generating summary...")
-        
-        # Prepare context
-        context = "\n\n".join([f"[Document {i+1}]\n{doc.content[:500]}" for i, (doc, _) in enumerate(results)])
-        
-        # Get output language
+
+        console.print(f"Found {len(results)} results, generating summary...")
+
+        context = "\n\n".join(
+            [f"[Document {i+1}]\n{doc.content[:500]}" for i, (doc, _) in enumerate(results)]
+        )
+
         out_lang = output_lang or cfg.get_output_language()
         lang_prompts = {
             "zh_CN": "请用简体中文总结",
@@ -587,7 +639,7 @@ def advanced_summarize(query: str, memory: str, output_lang: str):
             "ar": "يرجى تلخيص باللغة العربية",
         }
         lang_prompt = lang_prompts.get(out_lang, "Please summarize in English")
-        
+
         prompt = f"""Based on the following search results, provide a concise summary.
 
 Search Query: {query}
@@ -602,54 +654,69 @@ Please provide:
 3. A brief summary (2-3 sentences)
 """
     else:
-        click.echo(f"Generating summary of memory '{target}'...")
+        console.print(f"Generating summary of memory '[cyan]{target}[/cyan]'...")
         count = store.count()
-        
+
         if count == 0:
-            click.secho("Memory is empty.", fg="yellow")
+            console.print("[yellow]Memory is empty.[/yellow]")
             return
-        
-        click.echo(f"Memory contains {count} documents. Note: Full summary requires processing all documents.")
-        click.secho("Please use a search query for targeted summaries.", fg="yellow")
+
+        console.print(f"Memory contains {count} documents. Note: Full summary requires processing all documents.")
+        console.print("[yellow]Please use a search query for targeted summaries.[/yellow]")
         return
-    
+
     try:
-        response = llm.chat(prompt)
-        click.secho("\n=== Summary ===\n", fg="cyan")
-        click.echo(response.content)
+        with console.status("Generating summary..."):
+            response = llm.chat(prompt)
+        console.print(Panel(response.content, title="[cyan]Summary[/cyan]", border_style="cyan"))
     except Exception as e:
-        click.secho(f"Error generating summary: {e}", fg="red")
-        sys.exit(1)
+        console.print(f"[bold red]Error generating summary:[/bold red] {e}")
+        raise typer.Exit(1)
 
 
-@advanced.command("graph")
-@click.option("--memory", "-m", default=None, help="Target memory system name")
-@click.option("--format", "-f", default="text", type=click.Choice(["text", "dot", "json"]), help="Output format")
-def advanced_graph(memory: str, format: str):
+@advanced_app.command("graph")
+def advanced_graph(
+    memory: Optional[str] = typer.Option(None, "--memory", "-m", help="Target memory system"),
+    format: str = typer.Option("text", "--format", "-f", help="Output format: text, dot, json"),
+):
     """Display knowledge graph or entity relationships.
-    
+
     Examples:
         ariadne advanced graph
         ariadne advanced graph -m research -f dot
     """
     if format == "text":
-        click.echo("Knowledge Graph Feature")
-        click.echo("=" * 40)
-        click.echo("This feature extracts entities and relationships from your memory.")
-        click.echo("For visualization, use the GUI or export to DOT format.")
-        click.echo("\nNote: Full graph extraction requires LLM configuration.")
-        click.echo("Run 'ariadne config test' to verify your setup.")
+        console.print(Panel(
+            "This feature extracts entities and relationships from your memory.\n"
+            "For visualization, use the GUI or export to DOT format.\n\n"
+            "[dim]Note: Full graph extraction requires LLM configuration.\n"
+            "Run 'ariadne config test' to verify your setup.[/dim]",
+            title="Knowledge Graph",
+            border_style="cyan",
+        ))
     elif format == "dot":
-        click.echo("// DOT format for knowledge graph visualization")
-        click.echo("// Use with Graphviz: dot -Tpng graph.dot -o graph.png")
-        click.echo("digraph KnowledgeGraph {")
-        click.echo('    rankdir=LR;')
-        click.echo('    node [shape=box];')
-        click.echo("    // Configure LLM to enable entity extraction")
-        click.echo("}")
+        console.print("// DOT format for knowledge graph visualization")
+        console.print("// Use with Graphviz: dot -Tpng graph.dot -o graph.png")
+        console.print("digraph KnowledgeGraph {")
+        console.print('    rankdir=LR;')
+        console.print('    node [shape=box];')
+        console.print("    // Configure LLM to enable entity extraction")
+        console.print("}")
     else:
         import json
-        click.echo(json.dumps({"status": "graph_feature", "note": "Configure LLM for entity extraction"}, indent=2))
+        console.print(json.dumps(
+            {"status": "graph_feature", "note": "Configure LLM for entity extraction"},
+            indent=2,
+        ))
+
+
+# ═══════════════════════════════════════════
+# Entry point
+# ═══════════════════════════════════════════
+
+def main():
+    """Entry point for the Ariadne CLI."""
+    app()
 
 
 if __name__ == "__main__":
