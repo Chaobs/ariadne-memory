@@ -9,16 +9,16 @@ import { configApi } from '../api/ariadne';
 
 const VERSION = 'v0.6.2';
 
-// Flag emoji map (no Taiwan flag — zh_TW uses Hong Kong flag instead)
+// Flag image map — PNG files in /assets/flags/, 24x24px
 const FLAG_MAP: Record<string, string> = {
-  en: '🇺🇸',
-  zh_CN: '🇨🇳',
-  zh_TW: '🇭🇰',  // Hong Kong flag for Traditional Chinese
-  ja: '🇯🇵',
-  fr: '🇫🇷',
-  es: '🇪🇸',
-  ru: '🇷🇺',
-  ar: '🇸🇦',
+  en: '/assets/flags/en.png',
+  zh_CN: '/assets/flags/zh_CN.png',
+  zh_TW: '/assets/flags/zh_TW.png',
+  ja: '/assets/flags/ja.png',
+  fr: '/assets/flags/fr.png',
+  es: '/assets/flags/es.png',
+  ru: '/assets/flags/ru.png',
+  ar: '/assets/flags/ar.png',
 };
 
 const navItems = [
@@ -86,7 +86,7 @@ export default function Layout() {
     } catch {}
   }
 
-  const currentFlag = FLAG_MAP[locale] ?? '🌐';
+  const currentFlag = FLAG_MAP[locale] ?? '/assets/flags/en.png';
 
   return (
     <div className="layout">
@@ -116,7 +116,7 @@ export default function Layout() {
               onClick={(e) => { e.stopPropagation(); setShowLangMenu(!showLangMenu); }}
               title={t('settings.language')}
             >
-              {currentFlag} {locale.toUpperCase()}
+              <img src={currentFlag} alt={locale} className="flag-icon" /> {locale.toUpperCase()}
             </button>
             {showLangMenu && (
               <div className="lang-menu">
@@ -126,7 +126,7 @@ export default function Layout() {
                     className={`lang-menu-item ${l.code === locale ? 'active' : ''}`}
                     onClick={() => handleLanguageChange(l.code)}
                   >
-                    {FLAG_MAP[l.code] ?? '🌐'} {l.name}
+                    <img src={FLAG_MAP[l.code] ?? '/assets/flags/en.png'} alt={l.code} className="flag-icon" /> {l.name}
                   </button>
                 ))}
               </div>

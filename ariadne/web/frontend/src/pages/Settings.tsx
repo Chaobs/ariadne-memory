@@ -6,16 +6,16 @@ import { useState, useEffect } from 'react';
 import { configApi } from '../api/ariadne';
 import { setLocale, LOCALES, t, type Locale } from '../i18n';
 
-// Flag emoji map (no Taiwan flag — zh_TW uses Hong Kong flag instead)
+// Flag image map — PNG files in /assets/flags/, 24x24px
 const FLAG_MAP: Record<string, string> = {
-  en: '🇺🇸',
-  zh_CN: '🇨🇳',
-  zh_TW: '🇭🇰',
-  ja: '🇯🇵',
-  fr: '🇫🇷',
-  es: '🇪🇸',
-  ru: '🇷🇺',
-  ar: '🇸🇦',
+  en: '/assets/flags/en.png',
+  zh_CN: '/assets/flags/zh_CN.png',
+  zh_TW: '/assets/flags/zh_TW.png',
+  ja: '/assets/flags/ja.png',
+  fr: '/assets/flags/fr.png',
+  es: '/assets/flags/es.png',
+  ru: '/assets/flags/ru.png',
+  ar: '/assets/flags/ar.png',
 };
 
 export default function Settings() {
@@ -150,7 +150,7 @@ export default function Settings() {
               className={`lang-btn ${currentLocale === lang.code ? 'active' : ''}`}
               onClick={() => handleLanguage(lang.code)}
             >
-              {FLAG_MAP[lang.code] ?? '🌐'} {lang.name}
+              <img src={FLAG_MAP[lang.code] ?? '/assets/flags/en.png'} alt={lang.code} className="flag-icon" /> {lang.name}
             </button>
           ))}
         </div>

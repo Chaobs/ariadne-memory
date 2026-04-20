@@ -1054,6 +1054,23 @@ input:focus, select:focus {
   background: rgba(255,255,255,0.1);
 }
 
+/* Flag icon images — 24x24px, ensure visibility in both light/dark themes */
+.flag-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 2px;
+  vertical-align: middle;
+  object-fit: contain;
+}
+
+.lang-btn.active .flag-icon {
+  border: 1px solid rgba(255,255,255,0.4); /* subtle border on active */
+}
+
+.lang-menu-item .flag-icon {
+  margin-right: 6px;
+}
+
 .lang-menu-item.active {
   background: var(--accent);
   color: white;
