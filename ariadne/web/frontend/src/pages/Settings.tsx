@@ -6,6 +6,18 @@ import { useState, useEffect } from 'react';
 import { configApi } from '../api/ariadne';
 import { setLocale, LOCALES, t, type Locale } from '../i18n';
 
+// Flag emoji map (no Taiwan flag — zh_TW uses Hong Kong flag instead)
+const FLAG_MAP: Record<string, string> = {
+  en: '🇺🇸',
+  zh_CN: '🇨🇳',
+  zh_TW: '🇭🇰',
+  ja: '🇯🇵',
+  fr: '🇫🇷',
+  es: '🇪🇸',
+  ru: '🇷🇺',
+  ar: '🇸🇦',
+};
+
 export default function Settings() {
   const [provider, setProvider] = useState('deepseek');
   const [model, setModel] = useState('');
@@ -138,7 +150,7 @@ export default function Settings() {
               className={`lang-btn ${currentLocale === lang.code ? 'active' : ''}`}
               onClick={() => handleLanguage(lang.code)}
             >
-              {lang.name}
+              {FLAG_MAP[lang.code] ?? '🌐'} {lang.name}
             </button>
           ))}
         </div>

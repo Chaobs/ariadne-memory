@@ -116,7 +116,7 @@ export default function Layout() {
               onClick={(e) => { e.stopPropagation(); setShowLangMenu(!showLangMenu); }}
               title={t('settings.language')}
             >
-              {currentFlag}
+              {currentFlag} {locale.toUpperCase()}
             </button>
             {showLangMenu && (
               <div className="lang-menu">
