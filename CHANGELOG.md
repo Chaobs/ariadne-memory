@@ -27,7 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ariadne-web.bat` — Default port 8770
   - `ariadne-web.bat 8080` — Custom port
 
-- **`SCRIPTS.md`** — Documentation for all .bat shortcut scripts
+- **`ariadne-web.sh`** — New Unix shell script for Linux/macOS
+  - `./ariadne-web.sh` — Default port 8770
+  - `./ariadne-web.sh <port>` — Custom port
+  - `./ariadne-web.sh --dev` — Development mode (Vite + FastAPI)
+  - `./ariadne-web.sh --help` — Full help
+
+- **`SCRIPTS.md`** — Documentation for all shortcut scripts (Windows + Unix)
 
 ### Changed
 

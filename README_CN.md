@@ -143,13 +143,17 @@ pip install -r requirements.txt
 # 双击 ariadne-web.bat   现代 Web UI（推荐）
 ```
 
-**或使用命令行：**
+**Linux / macOS：**
+```bash
+./ariadne-web.sh              # 默认端口 8770
+./ariadne-web.sh 8080          # 自定义端口
+./ariadne-web.sh --dev        # 开发模式（Vite 热重载 + FastAPI）
+chmod +x ariadne-web.sh       # 首次使用需添加执行权限
+```
+
+**或使用 Python：**
 ```bash
 # 启动 Web UI（推荐）
-ariadne-web.bat              # 默认端口 8770
-ariadne-web.bat 8080          # 自定义端口
-
-# 或通过 Python
 python -m ariadne.cli web run
 
 # 摄入单个文件
@@ -341,7 +345,7 @@ vendor/                    # 第三方库本地化
 - [x] **上传进度条** — 文件摄入时实时视觉反馈
 - [x] **暗色/亮色主题切换**（保存在 localStorage）
 - [x] **响应式移动端适配**（<768px / <480px）
-- [x] 快捷入口脚本（ariadne-web.bat）
+- [x] 快捷入口脚本（ariadne-web.bat / ariadne-web.sh）
 
 ### 第三阶段 知识图谱 ✅ **已完成**
 - [x] 实体识别 + 关系抽取（LLM API 驱动）

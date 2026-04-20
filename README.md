@@ -143,13 +143,17 @@ pip install -r requirements.txt
 # Double-click ariadne-web.bat   — Modern Web UI (recommended)
 ```
 
-**Or use command line:**
+**Linux / macOS:**
+```bash
+./ariadne-web.sh              # Default port 8770
+./ariadne-web.sh 8080         # Custom port
+./ariadne-web.sh --dev        # Development mode (Vite + FastAPI)
+chmod +x ariadne-web.sh       # First-time only
+```
+
+**Or use Python directly:**
 ```bash
 # Start Web UI (recommended)
-ariadne-web.bat              # Default port 8770
-ariadne-web.bat 8080         # Custom port
-
-# Or via Python
 python -m ariadne.cli web run
 
 # Ingest a single file
