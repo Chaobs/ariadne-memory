@@ -1451,15 +1451,20 @@ class SPAStaticFiles(StaticFiles):
     """
 
     async def get_response(self, path: str, scope: Scope) -> Response:
+        # First try to serve the actual file from disk
         try:
             return await super().get_response(path, scope)
         except StarletteHTTPException as exc:
-            # StaticFiles raises StarletteHTTPException(404) when file not found.
-            # For SPA routing, serve index.html for non-API paths.
-            if exc.status_code == 404 and not scope.get("path", "").startswith("/api"):
-                index_path = os.path.join(self.directory, "index.html")
-                if os.path.isfile(index_path):
-                    return FileResponse(index_path)
+            if exc.status_code == 404:
+                # Check if the file actually exists — only serve index.html for true missing files
+                # (not for existing files that fail for other reasons)
+                full_path = os.path.join(self.directory, path.lstrip("/"))
+                if os.path.isfile(full_path):
+                    raise  # File exists but something else failed — re-raise
+                if not scope.get("path", "").startswith("/api"):
+                    index_path = os.path.join(self.directory, "index.html")
+                    if os.path.isfile(index_path):
+                        return FileResponse(index_path)
             raise
 
 
