@@ -86,6 +86,9 @@ app.add_typer(config_app, name="config")
 advanced_app = typer.Typer(help="Advanced features (requires LLM configuration).")
 app.add_typer(advanced_app, name="advanced")
 
+rag_app = typer.Typer(help="RAG pipeline commands (hybrid search + reranking + citations).")
+app.add_typer(rag_app, name="rag")
+
 
 def version_callback(value: bool):
     if value:
@@ -708,6 +711,173 @@ def advanced_graph(
             {"status": "graph_feature", "note": "Configure LLM for entity extraction"},
             indent=2,
         ))
+
+
+# ═══════════════════════════════════════════
+# RAG Pipeline
+# ═══════════════════════════════════════════
+
+@rag_app.command("search")
+def rag_search(
+    query: str = typer.Argument(..., help="Search query"),
+    top_k: int = typer.Option(5, "--top-k", "-k", help="Number of results to return"),
+    fetch_k: int = typer.Option(20, "--fetch-k", "-f", help="Candidates to fetch before reranking"),
+    alpha: float = typer.Option(0.5, "--alpha", "-a", help="Vector weight (1.0=vector only, 0.0=BM25 only)"),
+    no_rerank: bool = typer.Option(False, "--no-rerank", help="Skip reranking stage"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed scores and timing"),
+    memory: Optional[str] = typer.Option(None, "--memory", "-m", help="Target memory system"),
+):
+    """RAG search with hybrid vector+BM25 retrieval, reranking, and citations.
+
+    Examples:
+        ariadne rag search "machine learning optimization"
+        ariadne rag search "neural networks" -k 10 --verbose
+        ariadne rag search "transformer architecture" -a 0.7 --no-rerank
+    """
+    manager = get_manager()
+    store = manager.get_store(memory)
+
+    # Lazy import to avoid hard dependency
+    try:
+        from ariadne.rag import create_rag_engine
+    except ImportError as e:
+        console.print("[bold red]RAG dependencies not installed.[/bold red]")
+        console.print("Install with: [cyan]pip install rank-bm25 sentence-transformers[/cyan]")
+        console.print(f"[dim]Error: {e}[/dim]")
+        raise typer.Exit(1)
+
+    target = memory or manager.DEFAULT_COLLECTION
+    console.print(f"[Memory: [cyan]{target}[/cyan]] RAG search for: [yellow]{query}[/yellow]")
+
+    with console.status("[cyan]Searching..."):
+        engine = create_rag_engine(store, config={
+            "rerank": not no_rerank,
+            "alpha": alpha,
+            "top_k": top_k,
+        })
+
+        result = engine.query(
+            query=query,
+            top_k=top_k,
+            fetch_k=fetch_k,
+            alpha=alpha,
+            include_citations=True,
+            include_context=False,
+        )
+
+    if result.is_empty:
+        console.print("[yellow]No results found.[/yellow]")
+        return
+
+    # Display results
+    target_system = memory or manager.DEFAULT_COLLECTION
+    console.print(f"\n[Memory: [cyan]{target_system}[/cyan]] "
+                  f"Found [bold green]{len(result.results)}[/bold green] results:\n")
+
+    for i, res in enumerate(result.results, 1):
+        doc = res.document
+        # Truncate content for display
+        content_preview = doc.content[:400].replace("\n", " ")
+        source_type = doc.source_type.value
+        title = doc.metadata.get("title", Path(doc.source_path).stem)
+        score_bar = engine._score_bar(res.combined_score)
+
+        console.print(f"[{i}] [bold]{title}[/bold] ({source_type}) {score_bar}")
+        console.print(f"  {content_preview}...")
+        if verbose:
+            rerank_method = result.metadata.get("rerank_method", "none")
+            console.print(f"  [dim]vec={res.vector_score:.3f} bm25={res.bm25_score:.3f} "
+                          f"rank={res.rank} src={res.source} rerank={rerank_method}[/dim]")
+        console.print()
+
+    # Citations
+    if result.citations:
+        console.print(Panel(
+            "\n".join(c.format_markdown() for c in result.citations),
+            title=f"[cyan]Citations[/cyan] ({len(result.citations)})",
+            border_style="cyan",
+        ))
+
+    # Timing
+    if verbose and result.timings:
+        timing_lines = [f"{k}: {v:.1f}ms" for k, v in result.timings.items()]
+        console.print(f"[dim]Timing: {', '.join(timing_lines)}[/dim]")
+
+
+@rag_app.command("rebuild-index")
+def rag_rebuild_index(
+    memory: Optional[str] = typer.Option(None, "--memory", "-m", help="Target memory system"),
+):
+    """Rebuild the BM25 index from the vector store.
+
+    Run this after ingesting many new documents to keep keyword search accurate.
+
+    Examples:
+        ariadne rag rebuild-index
+        ariadne rag rebuild-index -m research
+    """
+    manager = get_manager()
+    store = manager.get_store(memory)
+
+    try:
+        from ariadne.rag import create_rag_engine
+    except ImportError as e:
+        console.print("[bold red]RAG dependencies not installed.[/bold red]")
+        console.print(f"[dim]{e}[/dim]")
+        raise typer.Exit(1)
+
+    target = memory or manager.DEFAULT_COLLECTION
+    with console.status("[cyan]Rebuilding BM25 index..."):
+        engine = create_rag_engine(store)
+        count = engine.rebuild_bm25_index()
+
+    console.print(f"[bold green][OK][/bold green] Indexed [bold]{count}[/bold] documents in BM25")
+
+
+@rag_app.command("health")
+def rag_health(
+    memory: Optional[str] = typer.Option(None, "--memory", "-m", help="Target memory system"),
+):
+    """Check health of RAG pipeline components.
+
+    Examples:
+        ariadne rag health
+        ariadne rag health -m research
+    """
+    manager = get_manager()
+    store = manager.get_store(memory)
+
+    try:
+        from ariadne.rag import create_rag_engine
+    except ImportError as e:
+        console.print("[bold red]RAG dependencies not installed.[/bold red]")
+        console.print(f"[dim]{e}[/dim]")
+        raise typer.Exit(1)
+
+    target = memory or manager.DEFAULT_COLLECTION
+    with console.status("[cyan]Checking RAG health..."):
+        engine = create_rag_engine(store)
+        status = engine.health_check()
+
+    table = Table(title=f"RAG Health — {target}", show_lines=False)
+    table.add_column("Component", style="cyan")
+    table.add_column("Status", style="bold")
+    table.add_column("Details", style="dim")
+
+    component_labels = {
+        "bm25": "BM25 Index",
+        "reranker": "Reranker",
+        "vector_store": "Vector Store",
+    }
+
+    for key, info in status.items():
+        healthy = info.get("healthy", False)
+        label = component_labels.get(key, key)
+        status_str = "[green]✓ OK[/green]" if healthy else "[red]✗ FAIL[/red]"
+        details = ", ".join(f"{k}={v}" for k, v in info.items() if k != "healthy")
+        table.add_row(label, status_str, details)
+
+    console.print(table)
 
 
 # ═══════════════════════════════════════════

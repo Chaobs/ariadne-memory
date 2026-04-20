@@ -5,6 +5,31 @@ All notable changes to Ariadne will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-04-20
+
+### Added
+
+- **RAG Pipeline**: Complete Retrieval-Augmented Generation infrastructure
+  - `ariadne/rag/` package with 6 new modules
+  - `BM25Retriever`: Keyword search via rank-bm25 (pure Python, no extra model)
+  - `HybridSearch`: Combines vector + BM25 via Reciprocal Rank Fusion (RRF)
+  - `Reranker`: Cross-encoder reranking (ms-marco-MiniLM-L-6-v2) with heuristic fallback
+  - `CitationGenerator`: Extracts highlighted excerpts with multiple output formats
+  - `RAGEngine`: Unified pipeline orchestrator with timing, health checks, warm-up
+  - Lazy initialization — models only loaded when needed
+  - Graceful degradation: if cross-encoder unavailable, uses heuristic reranking
+
+- **RAG CLI commands** (`ariadne rag`):
+  - `ariadne rag search` — Hybrid search with citations, scoring, and timing
+  - `ariadne rag rebuild-index` — Rebuild BM25 index after ingesting documents
+  - `ariadne rag health` — Check health of all RAG components
+
+- **RAG optional dependencies**: `rank-bm25` + `sentence-transformers` (separate install)
+
+### Changed
+
+- **Version**: Bumped from 0.4.0 to 0.5.0
+
 ## [0.4.0] - 2026-04-20
 
 ### Added

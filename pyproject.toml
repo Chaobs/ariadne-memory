@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ariadne-memory"
-version = "0.4.0"
+version = "0.5.0"
 description = "Cross-source AI memory and knowledge weaving system"
 readme = "README.md"
 license = "MIT"
@@ -48,6 +48,11 @@ dependencies = [
     "SQLAlchemy>=2.0.0",
     "requests>=2.31.0",
     "markitdown>=0.1.0",
+]
+# RAG pipeline dependencies (installed separately or via: pip install ariadne[rag])
+rag = [
+    "rank-bm25>=0.2.2",
+    "sentence-transformers>=2.2.0",
 ]
 
 [project.optional-dependencies]
