@@ -1,36 +1,36 @@
-# Ariadne User Guide
+# Ariadne 使用指南 / User Guide
 
-> Complete guide to Ariadne CLI and GUI.
+> 全面介绍 Ariadne 命令行工具和图形界面的所有功能 / Complete guide to Ariadne CLI and GUI.
 
-**[中文版](USAGE_CN.md)** | English Version
-
----
-
-## Table of Contents
-
-- [Basic Concepts](#basic-concepts)
-- [Basic Usage](#basic-usage)
-- [CLI Command Reference](#cli-command-reference)
-- [GUI Usage](#gui-usage)
-- [Tips & Tricks](#tips--tricks)
-- [Troubleshooting](#troubleshooting)
+**[English Version](USAGE.md)** | 中文版
 
 ---
 
-## Basic Concepts
+## 目录 / Table of Contents
 
-### Memory System
+- [基础概念 / Basic Concepts](#基础概念--basic-concepts)
+- [基础用法 / Basic Usage](#基础用法--basic-usage)
+- [CLI 命令详解 / CLI Command Reference](#cli-命令详解--cli-command-reference)
+- [GUI 使用指南 / GUI Usage](#gui-使用指南--gui-usage)
+- [小技巧 / Tips & Tricks](#小技巧--tips--tricks)
+- [故障排查 / Troubleshooting](#故障排查--troubleshooting)
 
-Ariadne supports multiple independent **memory systems**, each like a separate notebook:
+---
 
-| Concept | Description |
-|---------|-------------|
-| **Memory System** | Independent knowledge base with its own directory and collection |
-| **Default System** | Named "default", auto-created on first run |
-| **Data Storage** | Each system stored at `.ariadne/memories/{name}/` |
-| **Manifest** | `manifest.json` records all memory system metadata |
+## 基础概念 / Basic Concepts
 
-### How It Works
+### 记忆系统 (Memory System)
+
+Ariadne 支持多个独立的**记忆系统**，每个记忆系统就像一个独立的笔记本：
+
+| 概念 | 说明 |
+|------|------|
+| **记忆系统** | 独立存储的知识库，有自己的目录和集合 |
+| **默认系统** | 名为 "default" 的系统，首次运行自动创建 |
+| **数据存储** | 每个系统存储在项目根目录 `.ariadne/memories/{name}/` |
+| **Manifest** | `manifest.json` 记录所有记忆系统元数据 |
+
+### 工作原理 / How It Works
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -52,198 +52,198 @@ Ariadne supports multiple independent **memory systems**, each like a separate n
 │  ┌─────────────────────────────────────────────────────┐    │
 │  │  Memory Systems (Multiple Independent Stores)       │    │
 │  │  ┌─────────┐  ┌─────────┐  ┌─────────┐              │    │
-│  │  │ default │  │research │  │personal │  ...        │    │
+│  │  │ default │  │research │  │ personal│  ...        │    │
 │  │  └─────────┘  └─────────┘  └─────────┘              │    │
 │  └─────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Is LLM API Required?
+### 是否需要 LLM API？/ LLM API Required?
 
-**Basic features (ingest + search) do NOT require LLM API:**
-- Uses ChromaDB's built-in `all-MiniLM-L6-v2` model for vector generation
-- All data stored locally, no network requests
-- Semantic search based on vector similarity
+**基础功能（摄入 + 搜索）不需要 LLM API：**
+- 使用 ChromaDB 内置的 `all-MiniLM-L6-v2` 模型生成向量
+- 所有数据本地存储，无需网络请求
+- 语义搜索基于向量相似度计算
 
-**LLM API is optional for:**
-- Knowledge graph entity recognition and relation extraction (P3)
-- LLM-enhanced semantic reranking (P2)
-- Smart dynamic chunking (P2)
+**LLM API 可选用于：**
+- 知识图谱实体识别和关系抽取（P3）
+- LLM 增强语义重排（P2）
+- 智能动态分块（P2）
 
 ---
 
-## Basic Usage
+## 基础用法 / Basic Usage
 
-### Invocation
+### 调用方式 / Invocation
 
 ```bash
-# CLI (recommended)
+# CLI (推荐)
 python -m ariadne.cli [COMMAND] [OPTIONS]
 
 # GUI
 python -m ariadne.cli gui
 ```
 
-### Quick Start
+### 快速开始 / Quick Start
 
 ```bash
-# 1. List all memory systems
+# 1. 查看所有记忆系统
 python -m ariadne.cli memory list
 
-# 2. Create a new memory system
+# 2. 创建新记忆系统
 python -m ariadne.cli memory create "Research Notes"
 
-# 3. Ingest files to specific memory system
+# 3. 摄入文件到指定记忆系统
 python -m ariadne.cli ingest ./papers/ -r -m "Research Notes"
 
-# 4. Search
+# 4. 搜索
 python -m ariadne.cli search "AI ethics" -m "Research Notes"
 
-# 5. View stats
+# 5. 查看统计
 python -m ariadne.cli info --stats -m "Research Notes"
 
-# 6. Launch GUI
+# 6. 启动 GUI
 python -m ariadne.cli gui
 ```
 
 ---
 
-## CLI Command Reference
+## CLI 命令详解 / CLI Command Reference
 
-### 1. memory — Memory System Management
+### 1. memory — 记忆系统管理
 
 ```bash
 ariadne memory [COMMAND]
 ```
 
-#### Subcommands
+#### 子命令 / Subcommands
 
-| Command | Description |
-|---------|-------------|
-| `list` | List all memory systems |
-| `create <name>` | Create new memory system |
-| `rename <old> <new>` | Rename system |
-| `delete <name>` | Delete memory system |
-| `merge <sources...> <new>` | Merge multiple systems |
-| `info [name]` | View system info |
-| `clear [name]` | Clear all documents |
+| 命令 | 说明 |
+|------|------|
+| `list` | 列出所有记忆系统 |
+| `create <name>` | 创建新记忆系统 |
+| `rename <old> <new>` | 重命名 |
+| `delete <name>` | 删除记忆系统 |
+| `merge <sources...> <new>` | 合并多个系统 |
+| `info [name]` | 查看系统信息 |
+| `clear [name]` | 清除所有文档 |
 
-#### Examples
+#### 示例 / Examples
 
 ```bash
-# List all memory systems
+# 列出所有记忆系统
 ariadne memory list
 # Output:
 #    default: 42 documents
 #      research: 156 documents
 #      personal: 28 documents
 
-# Create new memory system
+# 创建新记忆系统
 ariadne memory create "My Research" -d "Academic papers and notes"
 
-# Rename
+# 重命名
 ariadne memory rename "My Research" "Academic"
 
-# Delete (requires confirmation)
+# 删除（需要确认）
 ariadne memory delete "Old Notes"
 
-# Delete (skip confirmation)
+# 删除（跳过确认）
 ariadne memory delete "Old Notes" --yes
 
-# Merge multiple systems
+# 合并多个系统
 ariadne memory merge research personal "All Knowledge"
 
-# Merge and delete originals
+# 合并并删除原系统
 ariadne memory merge research personal "All Knowledge" --delete
 
-# View system info
+# 查看系统信息
 ariadne memory info research
 
-# Clear documents
+# 清除文档
 ariadne memory clear research --yes
 ```
 
 ---
 
-### 2. ingest — File Ingestion
+### 2. ingest — 摄入文件
 
 ```bash
 ariadne ingest <PATH> [OPTIONS]
 ```
 
-#### Options
+#### 选项 / Options
 
-| Option | Short | Type | Default | Description |
-|--------|-------|------|---------|-------------|
-| `--recursive` | `-r` | flag | False | Recursive subdirectories |
-| `--verbose` | `-v` | flag | False | Verbose output |
-| `--batch-size` | `-b` | int | 100 | Batch size |
-| `--memory` | `-m` | str | default | Target memory system |
+| 选项 | 简写 | 类型 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `--recursive` | `-r` | 标志 | False | 递归子目录 |
+| `--verbose` | `-v` | 标志 | False | 详细输出 |
+| `--batch-size` | `-b` | 整数 | 100 | 批处理大小 |
+| `--memory` | `-m` | 字符串 | default | 目标记忆系统 |
 
-#### Examples
+#### 示例 / Examples
 
 ```bash
-# Ingest to default system
+# 摄入到默认系统
 ariadne ingest ./notes.md
 
-# Ingest to specific system
+# 摄入到指定系统
 ariadne ingest ./papers/ -r -m "Research"
 
-# Verbose output
+# 详细输出
 ariadne ingest ./docs/ -r -v
 
-# Specify batch size
+# 指定批处理大小
 ariadne ingest ./books/ -b 50 -m "Books"
 ```
 
 ---
 
-### 3. search — Semantic Search
+### 3. search — 语义搜索
 
 ```bash
 ariadne search <QUERY> [OPTIONS]
 ```
 
-#### Options
+#### 选项 / Options
 
-| Option | Short | Type | Default | Description |
-|--------|-------|------|---------|-------------|
-| `--top-k` | `-k` | int | 5 | Number of results |
-| `--verbose` | `-v` | flag | False | Show metadata |
-| `--memory` | `-m` | str | default | Memory system to search |
+| 选项 | 简写 | 类型 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `--top-k` | `-k` | 整数 | 5 | 返回结果数 |
+| `--verbose` | `-v` | 标志 | False | 显示元数据 |
+| `--memory` | `-m` | 字符串 | default | 搜索的记忆系统 |
 
-#### Examples
+#### 示例 / Examples
 
 ```bash
-# Basic search
+# 基本搜索
 ariadne search "machine learning"
 
-# More results
+# 更多结果
 ariadne search "deep learning" -k 10
 
-# Verbose output
+# 详细输出
 ariadne search "neural networks" -v
 
-# Search specific system
+# 搜索指定系统
 ariadne search "religion ethics" -m "Research"
 ```
 
 ---
 
-### 4. info — System Information
+### 4. info — 系统信息
 
 ```bash
 ariadne info [OPTIONS]
 ```
 
-#### Options
+#### 选项 / Options
 
-| Option | Description |
-|--------|-------------|
-| `--stats` | Show document statistics |
-| `--memory` | Specify memory system |
+| 选项 | 说明 |
+|------|------|
+| `--stats` | 显示文档统计 |
+| `--memory` | 指定记忆系统 |
 
-#### Examples
+#### 示例 / Examples
 
 ```bash
 ariadne info
@@ -253,80 +253,19 @@ ariadne info --stats -m "Research"
 
 ---
 
-### 5. gui — Graphical Interface
+### 5. gui — 图形界面
 
 ```bash
 ariadne gui
 ```
 
-Launch the full GUI with all CLI features.
+启动完整的图形界面，支持所有 CLI 功能。
 
 ---
 
-### 6. rag — RAG Pipeline
+## GUI 使用指南 / GUI Usage
 
-```bash
-ariadne rag [COMMAND]
-```
-
-#### Subcommands
-
-| Command | Description |
-|---------|-------------|
-| `search <QUERY>` | Hybrid search with citations |
-| `rebuild-index` | Rebuild BM25 index |
-| `health` | Check RAG component health |
-
-#### Examples
-
-```bash
-# Hybrid search with citations
-ariadne rag search "What is the main topic?"
-
-# Rebuild BM25 index
-ariadne rag rebuild-index
-
-# Check health
-ariadne rag health
-```
-
----
-
-### 7. advanced — Advanced Features
-
-```bash
-ariadne advanced [COMMAND]
-```
-
-#### Subcommands
-
-| Command | Description |
-|---------|-------------|
-| `summarize [query]` | Generate summary |
-| `graph [-f FORMAT]` | Export knowledge graph |
-| `graph-enrich` | Enrich graph with LLM entity extraction |
-
-#### Examples
-
-```bash
-# Generate summary
-ariadne advanced summarize "AI ethics"
-
-# Export graph as DOT
-ariadne advanced graph -f dot -o graph.dot
-
-# Export graph as Mermaid
-ariadne advanced graph -f mermaid -o graph.mmd
-
-# Enrich graph with LLM
-ariadne advanced graph-enrich
-```
-
----
-
-## GUI Usage
-
-### Layout
+### 界面布局 / Layout
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -349,115 +288,115 @@ ariadne advanced graph-enrich
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-### Features
+### 功能说明 / Features
 
-#### Memory System Management (Memory Systems Tab)
+#### 记忆系统管理 (Memory Systems Tab)
 
-| Action | Description |
-|--------|-------------|
-| **Dropdown** | Switch current memory system at top |
-| **Refresh** | Refresh system list and stats |
-| **New** | Create new memory system |
-| **Rename** | Rename current system |
-| **Delete** | Delete current system |
-| **Merge** | Merge multiple systems |
+| 操作 | 说明 |
+|------|------|
+| **下拉选择** | 在顶部切换当前记忆系统 |
+| **Refresh** | 刷新系统列表和统计 |
+| **New** | 创建新记忆系统 |
+| **Rename** | 重命名当前系统 |
+| **Delete** | 删除当前系统 |
+| **Merge** | 合并多个系统 |
 
-#### Ingest Tab
+#### 摄入功能 (Ingest Tab)
 
-| Action | Description |
-|--------|-------------|
-| **Add Files** | Add single or multiple files |
-| **Add Folder** | Add folder (recursive supported) |
-| **Remove Selected** | Remove selected files |
-| **Clear All** | Clear file list |
-| **Ingest All** | Start ingesting all files |
+| 操作 | 说明 |
+|------|------|
+| **Add Files** | 添加单个或多个文件 |
+| **Add Folder** | 添加文件夹（支持递归） |
+| **Remove Selected** | 移除选中的文件 |
+| **Clear All** | 清空文件列表 |
+| **Ingest All** | 开始摄入所有文件 |
 
-**Options:**
-- ☑ Recursive - Include subdirectories
-- ☑ Verbose - Verbose output
+**选项：**
+- ☑ Recursive - 递归子目录
+- ☑ Verbose - 详细输出
 
-#### Search Tab
+#### 搜索功能 (Search Tab)
 
-| Action | Description |
-|--------|-------------|
-| **Search box** | Enter query, press Enter to search |
-| **Results (k)** | Adjust number of results |
-| ☑ Show metadata - Show document metadata |
+| 操作 | 说明 |
+|------|------|
+| **搜索框** | 输入查询语句，按回车搜索 |
+| **Results (k)** | 调整返回结果数量 |
+| ☑ Show metadata - 显示文档元数据 |
 
-#### Info Tab
+#### 信息功能 (Info Tab)
 
-| Action | Description |
-|--------|-------------|
-| **Refresh Info** | Refresh system info |
-| **View All Systems** | View all system list |
-| **Clear This System** | Clear current system documents |
+| 操作 | 说明 |
+|------|------|
+| **Refresh Info** | 刷新系统信息 |
+| **View All Systems** | 查看所有系统列表 |
+| **Clear This System** | 清除当前系统文档 |
 
 ---
 
-## Tips & Tricks
+## 小技巧 / Tips & Tricks
 
-### 1. Multi-Memory Workflow
+### 1. 多记忆系统工作流 / Multi-Memory Workflow
 
 ```bash
-# Create independent systems for different projects
+# 为不同项目创建独立记忆系统
 ariadne memory create "PhD Research" -d "Dissertation materials"
 ariadne memory create "Trading Notes" -d "Crypto and stock analysis"
 ariadne memory create "Language Learning"
 
-# Categorized ingestion
+# 分类摄入
 ariadne ingest ./papers/ -r -m "PhD Research"
 ariadne ingest ./charts/ -m "Trading Notes"
 ariadne ingest ./vocabulary/ -m "Language Learning"
 ```
 
-### 2. System Merging
+### 2. 系统合并 / System Merging
 
 ```bash
-# Merge multiple systems into one
+# 将多个系统合并为一个
 ariadne memory merge "old_notes" "temp" "consolidated"
 
-# Merge and delete originals (cleanup)
+# 合并并删除原系统（清理）
 ariadne memory merge old_notes temp archive --delete
 ```
 
-### 3. Data Backup
+### 3. 数据备份 / Backup
 
 ```bash
-# Backup entire memory store
+# 备份整个记忆库
 cp -r .ariadne/memories .ariadne/memories_backup
 
-# Export specific system
+# 导出特定系统
 ariadne memory export research ./backup/research_memory
 ```
 
-### 4. Performance Optimization
+### 4. 性能优化 / Performance
 
-| Scenario | Recommendation |
-|----------|----------------|
-| Large files | Use `-b 200` to increase batch size |
-| First ingestion | Use `-r -v` to see processing progress |
-| Fast search | Keep systems lean, periodically clean unused docs |
+| 场景 | 建议 |
+|------|------|
+| 大量文件 | 使用 `-b 200` 增加批处理大小 |
+| 首次摄入 | 使用 `-r -v` 查看处理进度 |
+| 快速搜索 | 保持系统精简，定期清理无用文档 |
 
-### 5. Shell Aliases
+### 5. Shell 别名 / Shell Aliases
 
 ```bash
-# Add to ~/.bashrc or ~/.zshrc
+# 添加到 ~/.bashrc 或 ~/.zshrc
 
-# Core commands
+# 核心命令
 alias ariadne='python -m ariadne.cli'
 alias ari='python -m ariadne.cli'
 
-# Memory system operations
+# 记忆系统操作
 alias ari-list='ariadne memory list'
 alias ari-new='ariadne memory create'
 alias ari-del='ariadne memory delete'
 
-# Quick operations
+# 快速操作
 alias ari-info='ariadne info --stats'
 alias ari-ingest='ariadne ingest'
 alias ari-search='ariadne search'
 
-# Usage examples
+# 使用示例
 ari-list
 ari-new "My Project"
 ari-info -m "My Project"
@@ -465,62 +404,62 @@ ari-ingest ./notes.md -m "My Project"
 ari-search "query" -m "My Project"
 ```
 
-### 6. GUI Shortcuts
+### 6. GUI 快捷操作
 
-| Action | Shortcut |
-|--------|----------|
-| Search | Enter (in search box) |
-| Add files | Ctrl+O |
-| Exit | Ctrl+Q |
+| 操作 | 快捷键 |
+|------|--------|
+| 搜索 | Enter（在搜索框中） |
+| 添加文件 | Ctrl+O |
+| 退出 | Ctrl+Q |
 
 ---
 
-## Troubleshooting
+## 故障排查 / Troubleshooting
 
-### Common Issues
+### 常见问题 / Common Issues
 
-| Problem | Solution |
-|---------|----------|
-| "No supported files found" | Check if file extensions match supported list |
-| No search results | Verify files were ingested successfully (`ariadne info --stats`) |
-| Encoding error | Ensure file is UTF-8 encoded |
-| Memory system not found | Use `memory create` to create new system |
-| Cannot delete default system | Default system cannot be deleted by design |
+| 问题 | 解决方案 |
+|------|----------|
+| "No supported files found" | 检查文件扩展名是否匹配支持列表 |
+| 搜索无结果 | 确认文件已成功摄入 (`ariadne info --stats`) |
+| 编码错误 | 确保文件是 UTF-8 编码 |
+| 记忆系统不存在 | 使用 `memory create` 创建新系统 |
+| 无法删除默认系统 | 默认系统无法删除，这是设计保护 |
 
-### Reset
+### 重置 / Reset
 
 ```bash
-# Clear specific system
+# 清除特定系统
 ariadne memory clear <system_name> --yes
 
-# Delete and recreate
+# 删除并重建
 ariadne memory delete <system_name> --yes
 ariadne memory create <system_name>
 ```
 
-### Data Location
+### 数据位置 / Data Location
 
 ```bash
-# Default data directory (under project root)
+# 默认数据目录（项目根目录下）
 .ariadne/memories/
 
-# Structure
+# 结构
 .ariadne/memories/
-├── manifest.json          # System metadata
-├── default/              # Default memory system
+├── manifest.json          # 系统元数据
+├── default/              # 默认记忆系统
 │   └── (chroma db files)
-├── research/             # Research memory system
+├── research/             # 研究记忆系统
 │   └── (chroma db files)
 └── ...
 ```
 
 ---
 
-## Related Links
+## 相关链接 / Related Links
 
-- [README.md](README.md) - Project introduction
-- [Architecture](README.md#architecture) - Architecture design
-- [Roadmap](README.md#roadmap) - Development roadmap
+- [README.md](README.md) - 项目介绍
+- [Architecture](README.md#架构设计--architecture) - 架构设计
+- [Roadmap](README.md#开发路线--roadmap) - 开发路线
 
 ---
 
