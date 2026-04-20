@@ -57,8 +57,8 @@ const NODE_COLORS: Record<string, string> = {
 const TYPE_LABELS: Record<string, string> = {
   PERSON: '👤',
   ORGANIZATION: '🏢',
-  LOCATION: '📍',
-  CONCEPT: '💡',
+  LOCATION: '💡',
+  CONCEPT: '📍',
   TECHNOLOGY: '🔧',
   EVENT: '📅',
   WORK: '📄',

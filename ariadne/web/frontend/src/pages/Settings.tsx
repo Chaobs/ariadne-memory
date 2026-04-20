@@ -1,9 +1,10 @@
 /**
- * Settings — LLM configuration and language settings
+ * Settings — LLM configuration and language settings with full i18n
  */
 
 import { useState, useEffect } from 'react';
 import { configApi } from '../api/ariadne';
+import { setLocale, LOCALES, t, type Locale } from '../i18n';
 
 export default function Settings() {
   const [provider, setProvider] = useState('deepseek');
@@ -12,10 +13,16 @@ export default function Settings() {
   const [baseUrl, setBaseUrl] = useState('');
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [providers, setProviders] = useState<any[]>([]);
-  const [locale, setLocale] = useState('en');
+  const [currentLocale, setCurrentLocale] = useState<Locale>('en');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // Get initial locale from localStorage
+    const saved = localStorage.getItem('ariadne_locale') as Locale | null;
+    if (saved && LOCALES.some(l => l.code === saved)) {
+      setCurrentLocale(saved);
+    }
+
     configApi.providers().then((p: any) => setProviders(p.providers || [])).catch(console.error);
     configApi.get().then((c: any) => {
       const llm = c.config?.llm || {};
@@ -24,6 +31,18 @@ export default function Settings() {
       setApiKey(llm.api_key || '');
       setBaseUrl(llm.base_url || '');
     }).catch(console.error);
+  }, []);
+
+  // Re-render when locale changes
+  useEffect(() => {
+    function handleLocaleChange() {
+      const saved = localStorage.getItem('ariadne_locale') as Locale | null;
+      if (saved && LOCALES.some(l => l.code === saved)) {
+        setCurrentLocale(saved);
+      }
+    }
+    window.addEventListener('localechange', handleLocaleChange);
+    return () => window.removeEventListener('localechange', handleLocaleChange);
   }, []);
 
   async function handleSave(e: React.FormEvent) {
@@ -41,24 +60,24 @@ export default function Settings() {
     }
   }
 
-  async function handleLanguage(lang: string) {
+  async function handleLanguage(lang: Locale) {
     try {
+      // Update backend
       await configApi.setLanguage(lang);
+      // Update frontend i18n state
       setLocale(lang);
-      // Also update frontend i18n
-      localStorage.setItem('ariadne_locale', lang);
-      window.dispatchEvent(new CustomEvent('localechange', { detail: { locale: lang } }));
+      setCurrentLocale(lang);
     } catch (err) { console.error(err); }
   }
 
   return (
     <div className="page settings">
       <header className="page-header">
-        <h1>⚙️ Settings</h1>
+        <h1>⚙️ {t('settings.title')}</h1>
       </header>
 
       <form className="form-card" onSubmit={handleSave}>
-        <h2>LLM Configuration</h2>
+        <h2>{t('settings.llm')}</h2>
 
         <div className="form-group">
           <label>Provider</label>
@@ -100,7 +119,7 @@ export default function Settings() {
         </div>
 
         <button type="submit" className="btn-primary" disabled={saving}>
-          {saving ? 'Saving...' : 'Save & Test'}
+          {saving ? t('common.loading') : `${t('settings.save')} & ${t('settings.test')}`}
         </button>
 
         {testResult && (
@@ -111,21 +130,12 @@ export default function Settings() {
       </form>
 
       <div className="form-card">
-        <h2>Language</h2>
+        <h2>{t('settings.language')}</h2>
         <div className="lang-grid">
-          {[
-            { code: 'en', name: 'English' },
-            { code: 'zh_CN', name: '简体中文' },
-            { code: 'zh_TW', name: '繁體中文' },
-            { code: 'ja', name: '日本語' },
-            { code: 'fr', name: 'Français' },
-            { code: 'es', name: 'Español' },
-            { code: 'ru', name: 'Русский' },
-            { code: 'ar', name: 'العربية' },
-          ].map(lang => (
+          {LOCALES.map(lang => (
             <button
               key={lang.code}
-              className={`lang-btn ${locale === lang.code ? 'active' : ''}`}
+              className={`lang-btn ${currentLocale === lang.code ? 'active' : ''}`}
               onClick={() => handleLanguage(lang.code)}
             >
               {lang.name}

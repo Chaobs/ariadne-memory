@@ -4,16 +4,29 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { initI18n, setLocale, getLocale, LOCALES, t, type Locale } from '../i18n';
+import { setLocale, LOCALES, t, type Locale } from '../i18n';
 import { configApi } from '../api/ariadne';
 
-const VERSION = 'v0.6.1';
+const VERSION = 'v0.6.2';
+
+// Flag emoji map (no Taiwan flag — zh_TW uses Hong Kong flag instead)
+const FLAG_MAP: Record<string, string> = {
+  en: '🇺🇸',
+  zh_CN: '🇨🇳',
+  zh_TW: '🇭🇰',  // Hong Kong flag for Traditional Chinese
+  ja: '🇯🇵',
+  fr: '🇫🇷',
+  es: '🇪🇸',
+  ru: '🇷🇺',
+  ar: '🇸🇦',
+};
 
 const navItems = [
   { path: '/', label: 'nav.home', icon: '⌂' },
   { path: '/search', label: 'nav.search', icon: '🔍' },
   { path: '/memory', label: 'nav.memory', icon: '💾' },
   { path: '/ingest', label: 'nav.ingest', icon: '📥' },
+  { path: '/summarize', label: 'nav.summarize', icon: '📝' },
   { path: '/graph', label: 'nav.graph', icon: '🕸️' },
   { path: '/settings', label: 'nav.settings', icon: '⚙️' },
 ];
@@ -22,49 +35,58 @@ export default function Layout() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('ariadne-theme') as 'light' | 'dark') || 'light';
   });
-  const [locale, setLocaleState] = useState<Locale>(getLocale());
+  const [locale, setLocaleState] = useState<Locale>(() => {
+    const saved = localStorage.getItem('ariadne_locale') as Locale | null;
+    return (saved && LOCALES.some(l => l.code === saved)) ? saved : 'en';
+  });
   const [showLangMenu, setShowLangMenu] = useState(false);
 
-  // Initialize i18n on mount
+  // Close menu on outside click
   useEffect(() => {
-    const saved = localStorage.getItem('ariadne_locale') as Locale | null;
-    if (saved && LOCALES.some(l => l.code === saved)) {
-      setLocale(saved as Locale);
-      setLocaleState(saved as Locale);
-    } else {
-      initI18n();
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.lang-switcher')) {
+        setShowLangMenu(false);
+      }
     }
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  // Apply theme and direction to document
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     document.documentElement.dir = LOCALES.find(l => l.code === locale)?.dir ?? 'ltr';
     localStorage.setItem('ariadne-theme', theme);
   }, [theme, locale]);
 
-  // Listen for locale changes
+  // Listen for locale changes from Settings page or other components
   useEffect(() => {
-    function handleLocaleChange(e: CustomEvent<{ locale: Locale }>) {
-      setLocaleState(e.detail.locale);
-      setShowLangMenu(false);
+    function handleLocaleChange() {
+      const saved = localStorage.getItem('ariadne_locale') as Locale | null;
+      if (saved && LOCALES.some(l => l.code === saved)) {
+        setLocaleState(saved);
+      }
     }
-    window.addEventListener('localechange', handleLocaleChange as EventListener);
-    return () => window.removeEventListener('localechange', handleLocaleChange as EventListener);
+    window.addEventListener('localechange', handleLocaleChange);
+    return () => window.removeEventListener('localechange', handleLocaleChange);
   }, []);
 
   function toggleTheme() {
     setTheme(t => t === 'light' ? 'dark' : 'light');
   }
 
-  function handleLanguageChange(code: Locale) {
+  async function handleLanguageChange(code: Locale) {
     setLocale(code);
     setLocaleState(code);
     setShowLangMenu(false);
     // Sync with backend
-    configApi.setLanguage(code).catch(() => {});
+    try {
+      await configApi.setLanguage(code);
+    } catch {}
   }
 
-  const currentLocaleInfo = LOCALES.find(l => l.code === locale) ?? LOCALES[0];
+  const currentFlag = FLAG_MAP[locale] ?? '🌐';
 
   return (
     <div className="layout">
@@ -87,14 +109,14 @@ export default function Layout() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          {/* Language switcher */}
-          <div className="lang-switcher" style={{ position: 'relative' }}>
+          {/* Language switcher with flag */}
+          <div className="lang-switcher">
             <button
               className="lang-btn"
-              onClick={() => setShowLangMenu(!showLangMenu)}
-              title="Change language"
+              onClick={(e) => { e.stopPropagation(); setShowLangMenu(!showLangMenu); }}
+              title={t('settings.language')}
             >
-              🌐 {currentLocaleInfo.code.toUpperCase().replace('_', '')}
+              {currentFlag}
             </button>
             {showLangMenu && (
               <div className="lang-menu">
@@ -104,7 +126,7 @@ export default function Layout() {
                     className={`lang-menu-item ${l.code === locale ? 'active' : ''}`}
                     onClick={() => handleLanguageChange(l.code)}
                   >
-                    {l.name}
+                    {FLAG_MAP[l.code] ?? '🌐'} {l.name}
                   </button>
                 ))}
               </div>
@@ -113,7 +135,7 @@ export default function Layout() {
           <button
             className="theme-toggle-btn"
             onClick={toggleTheme}
-            title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+            title={theme === 'light' ? '🌙' : '☀️'}
           >
             {theme === 'light' ? '🌙' : '☀️'}
           </button>

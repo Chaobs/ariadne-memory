@@ -16,15 +16,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from starlette.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
+from starlette.types import Scope
 
 from ariadne import __version__
 from ariadne.memory import MemoryManager, get_manager
@@ -518,15 +523,21 @@ async def ingest_files_stream(
     manager: MemoryManager = Depends(get_memory_manager),
 ):
     """Ingest files with real-time SSE progress streaming."""
-    store = manager.get_store(memory)
-    total = len(files)
-    tmp_files = []
-    docs_added = 0
-    skipped = 0
-    errors = []
+    target = memory or manager.DEFAULT_COLLECTION
 
     async def event_stream():
-        nonlocal docs_added, skipped, errors
+        try:
+            store = manager.get_store(target)
+        except Exception as e:
+            yield f"event: error\ndata: {json.dumps({'error': f'Memory system error: {e}'})}\n\n"
+            yield f"event: complete\ndata: {json.dumps({'docs_added': 0, 'skipped': 0, 'errors': [], 'total_files': len(files)})}\n\n"
+            return
+
+        total = len(files)
+        docs_added = 0
+        skipped = 0
+        errors = []
+        tmp_files = []
 
         for i, upload in enumerate(files):
             # Emit processing event
@@ -546,7 +557,7 @@ async def ingest_files_stream(
                     ingestor = get_ingestor(tmp.name)
                 except (ValueError, ImportError):
                     skipped += 1
-                    yield f"event: skip\ndata: {json.dumps({'file': upload.filename})}\n\n"
+                    yield f"event: skip\ndata: {json.dumps({'file': upload.filename, 'reason': 'Unsupported file type'})}\n\n"
                     continue
 
                 try:
@@ -557,7 +568,7 @@ async def ingest_files_stream(
                         yield f"event: success\ndata: {json.dumps({'file': upload.filename, 'docs': len(docs)})}\n\n"
                     else:
                         skipped += 1
-                        yield f"event: skip\ndata: {json.dumps({'file': upload.filename})}\n\n"
+                        yield f"event: skip\ndata: {json.dumps({'file': upload.filename, 'reason': 'No content extracted'})}\n\n"
                 except Exception as e:
                     errors.append({"file": upload.filename or "unknown", "error": str(e)})
                     yield f"event: error\ndata: {json.dumps({'file': upload.filename, 'error': str(e)})}\n\n"
@@ -565,15 +576,14 @@ async def ingest_files_stream(
                 errors.append({"file": upload.filename or "unknown", "error": str(e)})
                 yield f"event: error\ndata: {json.dumps({'file': upload.filename, 'error': str(e)})}\n\n"
 
-        # Final result
-        yield f"event: complete\ndata: {json.dumps({'docs_added': docs_added, 'skipped': skipped, 'errors': errors, 'total_files': total})}\n\n"
-
-        # Cleanup
-        for tmp_path in tmp_files:
+            # Cleanup temp file per iteration
             try:
-                Path(tmp_path).unlink(missing_ok=True)
+                Path(tmp.name).unlink(missing_ok=True)
             except OSError:
                 pass
+
+        # Final result
+        yield f"event: complete\ndata: {json.dumps({'docs_added': docs_added, 'skipped': skipped, 'errors': errors, 'total_files': total})}\n\n"
 
     return StreamingResponse(
         event_stream(),
@@ -761,9 +771,14 @@ async def rag_search(
         if result.citations:
             for c in result.citations:
                 citations.append({
-                    "text": c.text,
-                    "source": c.source,
+                    "text": c.highlight,
+                    "source": c.source_path,
+                    "source_type": c.source_type,
+                    "title": c.title,
+                    "doc_id": c.doc_id,
+                    "score": round(c.score, 4),
                     "format_markdown": c.format_markdown(),
+                    "format_plain": c.format_plain(),
                 })
 
         return {
@@ -772,6 +787,56 @@ async def rag_search(
             "metadata": result.metadata,
             "memory": target,
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@search_router.post("/rag/rebuild-index")
+async def rag_rebuild_index(
+    memory: Optional[str] = Body(None),
+    manager: MemoryManager = Depends(get_memory_manager),
+):
+    """
+    Rebuild the BM25 index for a memory system.
+    Call this after ingesting many new documents.
+    """
+    try:
+        from ariadne.rag import create_rag_engine
+
+        store = manager.get_store(memory)
+        engine = create_rag_engine(store)
+        count = engine.rebuild_bm25_index()
+
+        return {"success": True, "indexed_docs": count, "memory": memory or manager.DEFAULT_COLLECTION}
+    except ImportError:
+        raise HTTPException(status_code=500, detail="RAG dependencies not installed. Install rank-bm25 and sentence-transformers.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@search_router.get("/rag/health")
+async def rag_health(
+    memory: Optional[str] = Query(None),
+    manager: MemoryManager = Depends(get_memory_manager),
+):
+    """
+    Check the health of RAG pipeline components.
+    Returns status for BM25 index, Reranker, and VectorStore.
+    """
+    try:
+        from ariadne.rag import create_rag_engine
+
+        store = manager.get_store(memory)
+        engine = create_rag_engine(store)
+        status = engine.health_check()
+
+        return {
+            "healthy": all(v.get("healthy", False) for v in status.values()),
+            "memory": memory or manager.DEFAULT_COLLECTION,
+            "components": status,
+        }
+    except ImportError:
+        raise HTTPException(status_code=500, detail="RAG dependencies not installed")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1377,18 +1442,36 @@ async def export_data(
 # Server Runner
 # ============================================================================
 
+class SPAStaticFiles(StaticFiles):
+    """StaticFiles that also serves index.html for SPA fallback.
+
+    Normal StaticFiles with html=True only serves index.html for directory
+    paths (ending in /). This class additionally serves index.html for any
+    non-file path (like /memory, /search), enabling full SPA client-side routing.
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            # StaticFiles raises StarletteHTTPException(404) when file not found.
+            # For SPA routing, serve index.html for non-API paths.
+            if exc.status_code == 404 and not scope.get("path", "").startswith("/api"):
+                index_path = os.path.join(self.directory, "index.html")
+                if os.path.isfile(index_path):
+                    return FileResponse(index_path)
+            raise
+
+
 def run_server(host: str = "127.0.0.1", port: int = 8770, reload: bool = False):
     """Run the Ariadne web server."""
     import uvicorn
 
-    # Try to serve the React frontend static files
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
         app = create_app()
-        from fastapi.staticfiles import StaticFiles
-
-        # Mount static files for React SPA
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+        # SPAStaticFiles: serves static assets + index.html fallback for SPA routing
+        app.mount("/", SPAStaticFiles(directory=str(static_dir), html=True), name="static")
         uvicorn.run(app, host=host, port=port)
     else:
         # API-only mode (frontend not built yet)

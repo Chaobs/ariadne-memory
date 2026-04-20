@@ -6,10 +6,15 @@ import { useState, useRef, useEffect } from 'react';
 import { searchApi, systemApi } from '../api/ariadne';
 import { t } from '../i18n';
 
+const LS_RESULTS_KEY = 'ariadne_search_results';
+
 export default function Search() {
   const [query, setQuery] = useState('');
   const [topK, setTopK] = useState(5);
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<any[]>(() => {
+    try { const s = sessionStorage.getItem(LS_RESULTS_KEY); return s ? JSON.parse(s) : []; }
+    catch { return []; }
+  });
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'semantic' | 'rag'>('semantic');
   const [systems, setSystems] = useState<{ name: string }[]>([]);
@@ -17,10 +22,47 @@ export default function Search() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState(-1);
+  const [ragHealth, setRagHealth] = useState<any>(null);
+  const [rebuilding, setRebuilding] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Persist results to sessionStorage
+  useEffect(() => {
+    if (results.length > 0) {
+      try { sessionStorage.setItem(LS_RESULTS_KEY, JSON.stringify(results)); } catch {}
+    }
+  }, [results]);
+
   systemApi.info().then(info => setSystems(info.systems)).catch(console.error);
+
+  // Check RAG health when switching to RAG mode
+  useEffect(() => {
+    if (mode === 'rag' && !ragHealth) {
+      searchApi.health(memory || undefined).then(setRagHealth).catch(() => setRagHealth({ healthy: false }));
+    }
+  }, [mode, memory]);
+
+  async function handleRebuildIndex() {
+    setRebuilding(true);
+    try {
+      const res = await searchApi.rebuildIndex(memory || undefined);
+      setRagHealth({ healthy: true, components: { bm25: { healthy: true, doc_count: res.indexed_docs } } });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRebuilding(false);
+    }
+  }
+
+  async function handleCheckHealth() {
+    try {
+      const res = await searchApi.health(memory || undefined);
+      setRagHealth(res);
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
   // Fetch suggestions with debounce
   useEffect(() => {
@@ -111,6 +153,42 @@ export default function Search() {
           >
             {t('search.rag')}
           </button>
+          {mode === 'rag' && (
+            <div className="rag-tools">
+              <button
+                className="btn-small"
+                onClick={() => alert(t('search.rag_help') + '\n\n' + t('search.rag_help_body'))}
+                title={t('search.rag_help')}
+              >
+                ❓ {t('search.rag_help')}
+              </button>
+              <button
+                className="btn-small"
+                onClick={handleRebuildIndex}
+                disabled={rebuilding}
+                title={t('search.rebuild_bm25')}
+              >
+                {rebuilding ? '⏳' : '🔄'} {t('search.rebuild_bm25')}
+              </button>
+              <button className="btn-small" onClick={handleCheckHealth} title={t('search.health')}>
+                🔍 {t('search.health')}
+              </button>
+              {ragHealth && (
+                <div className="rag-health-info">
+                  {ragHealth.components?.bm25 && (
+                    <span>📚 BM25: {ragHealth.components.bm25.doc_count ?? ragHealth.components.bm25.error ?? '?'} {t('search.docs')}</span>
+                  )}
+                  {ragHealth.components?.reranker && (
+                    <span>🔄 Reranker: {ragHealth.components.reranker.method ?? ragHealth.components.reranker.error ?? '?'}</span>
+                  )}
+                  {ragHealth.components?.vector_store && (
+                    <span>🗄️ Store: {ragHealth.components.vector_store.error ?? 'OK'}</span>
+                  )}
+                  {!ragHealth.healthy && <span className="health-warning">⚠️ RAG may return no results</span>}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 

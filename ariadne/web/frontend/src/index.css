@@ -343,6 +343,48 @@ input:focus, select:focus {
 /* Search form */
 .search-form { margin-bottom: 24px; }
 
+/* RAG tools panel */
+.rag-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  flex-wrap: wrap;
+}
+
+.rag-tools .btn-small {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rag-tools .btn-small:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.rag-health-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  padding: 6px 10px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.health-warning {
+  color: #f59e0b;
+  font-weight: 500;
+}
+
 .search-input {
   font-size: 1.1rem;
   padding: 14px 16px;
@@ -565,6 +607,11 @@ input:focus, select:focus {
   cursor: pointer;
   font-size: 0.9rem;
   transition: all 0.2s;
+  color: var(--text); /* ensure readable text in both light/dark themes */
+}
+
+[data-theme="light"] .lang-btn {
+  color: #1a1a2e; /* dark text on light surface for good contrast */
 }
 
 .lang-btn:hover { border-color: var(--accent); }
@@ -982,6 +1029,12 @@ input:focus, select:focus {
   z-index: 1000;
   min-width: 120px;
   margin-bottom: 4px;
+}
+
+/* RTL: flip language menu to right side for Arabic/Hebrew */
+[dir="rtl"] .lang-menu {
+  left: auto;
+  right: 0;
 }
 
 .lang-menu-item {

@@ -528,26 +528,7 @@ def info(
 
 
 # ═══════════════════════════════════════════
-# GUI
-# ═══════════════════════════════════════════
-
-@app.command()
-def gui():
-    """Launch the graphical user interface."""
-    try:
-        from ariadne.gui import main as gui_main
-        gui_main()
-    except ImportError:
-        console.print("[bold red]Error:[/bold red] tkinter is not available on this system.")
-        console.print("[yellow]GUI requires a graphical environment (Windows/macOS/Linux desktop).[/yellow]")
-        raise typer.Exit(1)
-    except Exception as e:
-        console.print(f"[bold red]Error launching GUI:[/bold red] {e}")
-        raise typer.Exit(1)
-
-
-# ═══════════════════════════════════════════
-# Config Management
+# Web UI
 # ═══════════════════════════════════════════
 
 @config_app.command("show")

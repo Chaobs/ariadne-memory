@@ -210,6 +210,25 @@ export const searchApi = {
     fetchJSON<{ suggestions: string[] }>(
       `${API_BASE}/search/suggest?q=${encodeURIComponent(q)}${memory ? `&memory=${encodeURIComponent(memory)}` : ''}`
     ),
+
+  /** Rebuild BM25 index after ingesting documents */
+  rebuildIndex: (memory?: string) =>
+    fetchJSON<{ success: boolean; indexed_docs: number; memory: string }>(
+      `${API_BASE}/search/rag/rebuild-index`,
+      {
+        method: 'POST',
+        body: memory !== undefined ? JSON.stringify({ memory }) : '{}',
+        headers: { 'Content-Type': 'application/json' },
+      }
+    ),
+
+  /** Check RAG pipeline health */
+  health: (memory?: string) =>
+    fetchJSON<{
+      healthy: boolean;
+      memory: string;
+      components: Record<string, { healthy: boolean; doc_count?: number; method?: string; error?: string }>;
+    }>(`${API_BASE}/search/rag/health${memory ? `?memory=${encodeURIComponent(memory)}` : ''}`),
 };
 
 // Graph API

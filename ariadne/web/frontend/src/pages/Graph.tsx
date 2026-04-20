@@ -11,8 +11,8 @@ const ENTITY_TYPES = [
   { code: 'ALL', label: 'All Types' },
   { code: 'PERSON', label: '👤 Person' },
   { code: 'ORGANIZATION', label: '🏢 Organization' },
-  { code: 'LOCATION', label: '📍 Location' },
-  { code: 'CONCEPT', label: '💡 Concept' },
+  { code: 'LOCATION', label: '💡 Location' },
+  { code: 'CONCEPT', label: '📍 Concept' },
   { code: 'TECHNOLOGY', label: '🔧 Technology' },
   { code: 'EVENT', label: '📅 Event' },
 ];
