@@ -1,7 +1,7 @@
 # Ariadne · 阿里阿德涅
 
-> 阿里阿德涅（Ariadne）是希腊神话中帮助忒修斯穿越迷宫的女神，手持线团引导归途。
-> 正如我们的系统 —— 织入你所有的知识，在记忆的迷宫中为你指引方向。
+> Ariadne, in Greek mythology, was the goddess who helped Theseus navigate through the labyrinth, holding a ball of thread to guide his way back. 
+> Just like our system - weaving in all your knowledge, it leads you through the maze of memory.
 
 **Ariadne** is a cross-source AI memory and knowledge weaving system that ingests documents, conversations, and code from various sources into a searchable knowledge network.
 
@@ -325,7 +325,7 @@ vendor/                     # Third-party packages
 
 ## Roadmap
 
-> **Current Phase**: Phase 2 — Web UI Alpha (FastAPI + React) 🔄
+> **Current Phase**: Phase 2 — Web UI ✅ Completed | Phase 3 — Plugin System 🔄
 
 ### Phase 0 MVP ✅ **Completed**
 - [x] Project skeleton and directory structure
@@ -352,15 +352,21 @@ vendor/                     # Third-party packages
 - [x] GUI LLM model switching
 - [x] **Smart summarization fix** — Fixed JSON curly brace escaping in Summarize prompt
 
-### Phase 2 Web UI 🔄 **In Progress**
+### Phase 2 Web UI ✅ **Completed**
 - [x] `ariadne web run/info` CLI commands
 - [x] FastAPI REST API (12+ endpoints covering all CLI/GUI functionality)
 - [x] React + Vite + TypeScript SPA (6 pages: Home/Search/Memory/Ingest/Graph/Settings)
 - [x] Vite dev server proxy for seamless API integration
-- [ ] 🔨 **Beautiful graph visualization** — D3.js or Cytoscape.js interactive knowledge graph
-- [ ] 🔨 **Real-time ingestion progress** — SSE (Server-Sent Events) for live upload progress
-- [ ] 🔨 **Dark/light theme toggle**
-- [ ] 🔨 **Responsive mobile-friendly layout**
+- [x] **Beautiful graph visualization** — D3.js interactive knowledge graph
+- [x] **Real-time ingestion progress** — SSE (Server-Sent Events) for live upload progress
+- [x] **Dark/light theme toggle**
+- [x] **Responsive mobile-friendly layout**
+- [x] **Graph export** — HTML/Markdown/DOCX/SVG/JSON/Mermaid/PNG
+- [x] **Graph filtering** — Filter by entity type (Person/Organization/etc.)
+- [x] **Graph node search** — Search and highlight nodes
+- [x] **Graph hover highlighting** — Connected edges highlight on hover
+- [x] **Search autocomplete** — Real-time suggestions with keyboard navigation
+- [x] **Web UI i18n** — 8 languages with language switcher in sidebar
 
 ### Phase 3 Knowledge Graph ✅ **Completed**
 - [x] Entity recognition + relation extraction (LLM API)
@@ -410,10 +416,10 @@ vendor/                     # Third-party packages
 - [x] .gitignore update (config.json / .ariadne not committed)
 
 ### Phase 6 Community & Iteration (Ongoing)
-- [x] GitHub release v0.2.0 → v0.5.0
+- [x] GitHub release v0.2.0 → v0.6.2
 - [x] **Web UI (FastAPI + React)** — Modern cross-platform interface, replacing legacy Tkinter
-- [ ] 🔨 **Real-time ingestion progress** — SSE for live upload progress
-- [ ] 🔨 **Beautiful graph visualization** — D3.js or Cytoscape.js interactive knowledge graph
+- [x] **Real-time ingestion progress** — SSE for live upload progress
+- [x] **Beautiful graph visualization** — D3.js interactive knowledge graph
 - [ ] 🔨 **Wiki pages and detailed documentation**
 - [ ] 🔨 **Logo and icon design**
 - [ ] 🔨 **Cloud backup & network query** (memory system cloud sync + real-time info retrieval)

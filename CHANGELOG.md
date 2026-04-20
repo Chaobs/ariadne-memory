@@ -5,6 +5,46 @@ All notable changes to Ariadne will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-04-20
+
+### Added
+
+- **SSE Real-time Ingestion Progress** — Server-Sent Events streaming for file ingestion
+  - Real-time progress events (processing, success, error, skip, complete)
+  - Per-file processing log with status indicators
+  - Live progress bar with phase labels
+
+- **Graph Export (6 formats)** — Download knowledge graph as multiple formats
+  - HTML: Interactive standalone HTML page
+  - Markdown (.md): Portable markdown document
+  - Word (.docx): Microsoft Word document
+  - SVG: Scalable vector graphic
+  - JSON: Raw graph data
+  - Mermaid: Mermaid flowchart diagram
+  - PNG: Rasterized graph image (via Canvas API)
+
+- **Graph Filtering** — Filter nodes by entity type (Person/Organization/Location/etc.)
+
+- **Graph Node Search** — Search and highlight specific nodes in the graph
+
+- **Graph Hover Highlighting** — Hovering a node highlights its connected edges
+
+- **Web UI i18n** — 8-language internationalization support
+  - English, 简体中文, 繁體中文, 日本語, Français, Español, Русский, العربية
+  - Language switcher in sidebar footer and Settings page
+  - RTL support for Arabic
+
+- **Search Autocomplete** — Real-time search suggestions with keyboard navigation
+  - Debounced (300ms) suggestion fetching
+  - Arrow key navigation + Enter to select
+  - Dropdown suggestions panel
+
+### Changed
+
+- **Graph Page** — Complete redesign with filter/search/export toolbar
+- **Graph D3 Component** — Enhanced with shadow filters, connected edge highlighting
+- **Ingest Page** — Real-time streaming instead of simulated progress
+
 ## [0.6.1] - 2026-04-20
 
 ### Added

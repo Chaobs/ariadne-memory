@@ -1,32 +1,45 @@
 /**
  * D3Graph — Interactive knowledge graph visualization
- * Uses D3.js force-directed layout with zoom/pan/drag
+ * Features: zoom/pan/drag, type filtering, node search, highlighting, PNG export
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import { graphApi } from '../api/ariadne';
+import { t } from '../i18n';
 
-interface GraphNode {
+interface GraphNode extends d3.SimulationNodeDatum {
   id: string;
   label: string;
   type: string;
+  description?: string;
+  aliases?: string[];
   x?: number;
   y?: number;
   fx?: number | null;
   fy?: number | null;
+  vx?: number;
+  vy?: number;
 }
 
-interface GraphEdge {
+interface GraphEdge extends d3.SimulationLinkDatum<GraphNode> {
   source: string | GraphNode;
   target: string | GraphNode;
   label?: string;
+  type?: string;
 }
 
 interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
   stats: { entities: number; relations: number };
+}
+
+interface D3GraphProps {
+  filterType?: string;
+  searchQuery?: string;
+  onNodeHighlight?: (nodeId: string | null) => void;
+  highlightedNodeId?: string | null;
 }
 
 const NODE_COLORS: Record<string, string> = {
@@ -36,6 +49,8 @@ const NODE_COLORS: Record<string, string> = {
   CONCEPT: '#e03e3e',
   TECHNOLOGY: '#9333ea',
   EVENT: '#06b6d4',
+  WORK: '#ffc107',
+  TOPIC: '#607d8b',
   DEFAULT: '#6e6e73',
 };
 
@@ -46,40 +61,101 @@ const TYPE_LABELS: Record<string, string> = {
   CONCEPT: '💡',
   TECHNOLOGY: '🔧',
   EVENT: '📅',
+  WORK: '📄',
+  TOPIC: '📁',
   DEFAULT: '📌',
 };
 
-export default function D3Graph() {
+export default function D3Graph({
+  filterType,
+  searchQuery = '',
+  onNodeHighlight,
+  highlightedNodeId,
+}: D3GraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const simulationRef = useRef<d3.Simulation<GraphNode, GraphEdge> | null>(null);
   const [data, setData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [maxNodes, setMaxNodes] = useState(50);
 
-  useEffect(() => {
-    loadGraph();
-  }, [maxNodes]);
-
-  function loadGraph() {
+  const loadGraph = useCallback(() => {
     setLoading(true);
     setError('');
-    graphApi.getData(maxNodes)
+    graphApi.getData(maxNodes, filterType)
       .then(setData)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }
+  }, [maxNodes, filterType]);
 
+  useEffect(() => {
+    loadGraph();
+  }, [loadGraph]);
+
+  // Handle PNG export event
+  useEffect(() => {
+    function handleExportPNG() {
+      if (!svgRef.current) return;
+      const svg = svgRef.current;
+      const serializer = new XMLSerializer();
+      const svgStr = serializer.serializeToString(svg);
+      const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = svg.clientWidth * 2;
+        canvas.height = svg.clientHeight * 2;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const a = document.createElement('a');
+        a.download = 'knowledge-graph.png';
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    }
+    window.addEventListener('graph:export-png', handleExportPNG);
+    return () => window.removeEventListener('graph:export-png', handleExportPNG);
+  }, []);
+
+  // D3 visualization
   useEffect(() => {
     if (!data || !svgRef.current || !containerRef.current) return;
 
     const container = containerRef.current;
-    const width = container.clientWidth || 700;
-    const height = 500;
+    const width = container.clientWidth || 800;
+    const height = 550;
 
     // Clear previous
     d3.select(svgRef.current).selectAll('*').remove();
+    if (simulationRef.current) {
+      simulationRef.current.stop();
+    }
+
+    // Filter nodes by search query
+    let displayNodes: GraphNode[] = data.nodes.map(n => ({ ...n }));
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      displayNodes = displayNodes.filter(n =>
+        n.label.toLowerCase().includes(q) ||
+        n.type.toLowerCase().includes(q)
+      );
+    }
+
+    const nodeIds = new Set(displayNodes.map(n => n.id));
+    const displayEdges: GraphEdge[] = data.edges.filter(e => {
+      const src = typeof e.source === 'string' ? e.source : e.source.id;
+      const tgt = typeof e.target === 'string' ? e.target : e.target.id;
+      return nodeIds.has(src) && nodeIds.has(tgt);
+    });
+
+    if (displayNodes.length === 0) return;
 
     const svg = d3.select(svgRef.current)
       .attr('width', width)
@@ -100,9 +176,18 @@ export default function D3Graph() {
       .attr('d', 'M 0,-5 L 10,0 L 0,5')
       .attr('fill', '#999');
 
+    // Drop shadow filter
+    const filter = defs.append('filter')
+      .attr('id', 'shadow')
+      .attr('x', '-20%').attr('y', '-20%')
+      .attr('width', '140%').attr('height', '140%');
+    filter.append('feDropShadow')
+      .attr('dx', 0).attr('dy', 2)
+      .attr('stdDeviation', 3)
+      .attr('flood-opacity', 0.2);
+
     // Zoom & pan
     const g = svg.append('g');
-
     svg.call(
       d3.zoom<SVGSVGElement, unknown>()
         .scaleExtent([0.1, 4])
@@ -117,27 +202,22 @@ export default function D3Graph() {
       .attr('height', height)
       .attr('fill', '#fafafa');
 
-    // Nodes and edges data
-    const nodes: GraphNode[] = data.nodes.map(n => ({ ...n }));
-    const edges: GraphEdge[] = data.edges.map(e => ({ ...e }));
-
-    if (nodes.length === 0) return;
-
     // Force simulation
-    const simulation = d3.forceSimulation<GraphNode>(nodes)
-      .force('link', d3.forceLink<GraphNode, GraphEdge>(edges)
+    const simulation = d3.forceSimulation<GraphNode>(displayNodes)
+      .force('link', d3.forceLink<GraphNode, GraphEdge>(displayEdges)
         .id(d => d.id)
-        .distance(100)
+        .distance(120)
       )
-      .force('charge', d3.forceManyBody().strength(-300))
+      .force('charge', d3.forceManyBody().strength(-350))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(40));
+      .force('collision', d3.forceCollide().radius(50));
+    simulationRef.current = simulation;
 
     // Edges
     const link = g.append('g')
       .attr('class', 'links')
       .selectAll('line')
-      .data(edges)
+      .data(displayEdges)
       .join('line')
       .attr('stroke', '#ccc')
       .attr('stroke-width', 1.5)
@@ -147,7 +227,7 @@ export default function D3Graph() {
     const edgeLabel = g.append('g')
       .attr('class', 'edge-labels')
       .selectAll('text')
-      .data(edges.filter(e => e.label))
+      .data(displayEdges.filter(e => e.label))
       .join('text')
       .attr('font-size', 10)
       .attr('fill', '#888')
@@ -158,11 +238,11 @@ export default function D3Graph() {
     const node = g.append('g')
       .attr('class', 'nodes')
       .selectAll('g')
-      .data(nodes)
+      .data(displayNodes)
       .join('g')
       .attr('cursor', 'pointer');
 
-    // Drag behavior — use any to avoid strict D3 type incompatibility
+    // Drag behavior
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dragBehavior = d3.drag<any, GraphNode>()
       .on('start', (event: d3.D3DragEvent<any, GraphNode, GraphNode>, d) => {
@@ -179,17 +259,19 @@ export default function D3Graph() {
         d.fx = null;
         d.fy = null;
       });
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     node.call(dragBehavior as any);
 
     // Node circles
     node.append('circle')
-      .attr('r', d => d.type ? 16 : 12)
-      .attr('fill', d => NODE_COLORS[d.type?.toUpperCase()] || NODE_COLORS.DEFAULT)
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 2)
-      .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))');
+      .attr('r', d => highlightedNodeId === d.id ? 22 : (d.type ? 16 : 12))
+      .attr('fill', d => {
+        if (highlightedNodeId === d.id) return '#4CAF50';
+        return NODE_COLORS[d.type?.toUpperCase()] || NODE_COLORS.DEFAULT;
+      })
+      .attr('stroke', d => highlightedNodeId === d.id ? '#2E7D32' : '#fff')
+      .attr('stroke-width', d => highlightedNodeId === d.id ? 3 : 2)
+      .attr('filter', 'url(#shadow)');
 
     // Node emoji labels
     node.append('text')
@@ -203,24 +285,45 @@ export default function D3Graph() {
       .attr('text-anchor', 'middle')
       .attr('dy', 32)
       .attr('font-size', 11)
-      .attr('fill', '#333')
-      .attr('font-weight', 500)
-      .text(d => d.label.length > 20 ? d.label.slice(0, 18) + '…' : d.label);
+      .attr('font-weight', d => highlightedNodeId === d.id ? 'bold' : '500')
+      .attr('fill', d => highlightedNodeId === d.id ? '#1a1a1a' : '#333')
+      .text(d => {
+        const label = d.label.length > 20 ? d.label.slice(0, 18) + '…' : d.label;
+        return searchQuery && label.toLowerCase().includes(searchQuery.toLowerCase())
+          ? label
+          : label;
+      })
+      .attr('paint-order', 'stroke')
+      .attr('stroke', '#fafafa')
+      .attr('stroke-width', 3);
 
-    // Click handler
-    node.on('click', (_event, d) => {
-      setSelectedNode(d);
-    });
-
-    // Hover effect
-    node.on('mouseover', function() {
+    // Highlight connected edges when a node is hovered
+    node.on('mouseover', function(_event, d) {
+      // Highlight connected edges
+      link.attr('stroke', e => {
+        const src = typeof e.source === 'string' ? e.source : e.source.id;
+        const tgt = typeof e.target === 'string' ? e.target : e.target.id;
+        return (src === d.id || tgt === d.id) ? '#4CAF50' : '#ccc';
+      }).attr('stroke-width', e => {
+        const src = typeof e.source === 'string' ? e.source : e.source.id;
+        const tgt = typeof e.target === 'string' ? e.target : e.target.id;
+        return (src === d.id || tgt === d.id) ? 2.5 : 1.5;
+      });
+      // Enlarge node
       d3.select(this).select('circle')
         .transition().duration(150)
         .attr('r', 20);
     }).on('mouseout', function(_event, d) {
+      link.attr('stroke', '#ccc').attr('stroke-width', 1.5);
       d3.select(this).select('circle')
         .transition().duration(150)
-        .attr('r', d.type ? 16 : 12);
+        .attr('r', highlightedNodeId === d.id ? 22 : (d.type ? 16 : 12));
+    });
+
+    // Click handler — highlight connected nodes
+    node.on('click', (_event, d) => {
+      setSelectedNode(d);
+      onNodeHighlight?.(d.id);
     });
 
     // Tick
@@ -241,7 +344,7 @@ export default function D3Graph() {
     return () => {
       simulation.stop();
     };
-  }, [data]);
+  }, [data, searchQuery, highlightedNodeId, onNodeHighlight]);
 
   return (
     <div className="d3-graph-wrapper">
@@ -249,7 +352,7 @@ export default function D3Graph() {
         <span className="graph-title">🕸️ Knowledge Graph</span>
         <div className="graph-controls">
           <label>
-            Max nodes:
+            {t('graph.max_nodes')}:
             <select value={maxNodes} onChange={e => setMaxNodes(Number(e.target.value))}>
               <option value={20}>20</option>
               <option value={50}>50</option>
@@ -257,33 +360,39 @@ export default function D3Graph() {
               <option value={200}>200</option>
             </select>
           </label>
-          <button className="btn-icon" onClick={loadGraph} title="Refresh">🔄</button>
+          <button className="btn-icon" onClick={loadGraph} title={t('graph.refresh')}>🔄</button>
         </div>
         {data && (
           <span className="graph-stats">
-            {data.stats?.entities ?? 0} entities · {data.stats?.relations ?? 0} relations
+            {data.stats?.entities ?? 0} {t('graph.entities')} · {data.stats?.relations ?? 0} {t('graph.relations')}
           </span>
         )}
       </div>
 
       <div ref={containerRef} className="d3-container">
-        {loading && <div className="page-loading">Loading graph...</div>}
+        {loading && <div className="page-loading">{t('graph.loading')}</div>}
         {error && <div className="empty-state">Error: {error}</div>}
         {!loading && !error && data && data.nodes.length === 0 && (
           <div className="empty-state">
-            <p>No entities in the knowledge graph yet.</p>
-            <p>Go to <strong>Ingest</strong> and enable "Enrich Knowledge Graph" when ingesting files.</p>
+            <p>{t('graph.no_data')}</p>
+            <p>Ingest files and enable <strong>Enrich Knowledge Graph</strong> to see entities.</p>
           </div>
         )}
-        <svg ref={svgRef} style={{ display: data && data.nodes.length > 0 ? 'block' : 'none' }} />
+        <svg
+          ref={svgRef}
+          style={{
+            display: data && data.nodes.length > 0 ? 'block' : 'none',
+            cursor: 'grab',
+          }}
+        />
       </div>
 
       {selectedNode && (
-        <div className="node-detail-panel" onClick={() => setSelectedNode(null)}>
+        <div className="node-detail-panel" onClick={() => { setSelectedNode(null); onNodeHighlight?.(null); }}>
           <div className="node-detail-card" onClick={e => e.stopPropagation()}>
             <div className="node-detail-header">
               <span className="node-detail-icon">
-                {NODE_COLORS[selectedNode.type?.toUpperCase()] && TYPE_LABELS[selectedNode.type?.toUpperCase()]}
+                {TYPE_LABELS[selectedNode.type?.toUpperCase()]}
               </span>
               <h3>{selectedNode.label}</h3>
             </div>
@@ -296,8 +405,16 @@ export default function D3Graph() {
                 <span className="label">Type:</span>
                 <span className="type-badge">{selectedNode.type || 'Unknown'}</span>
               </div>
+              {selectedNode.description && (
+                <div className="node-detail-row">
+                  <span className="label">Description:</span>
+                  <span>{selectedNode.description}</span>
+                </div>
+              )}
             </div>
-            <button className="btn-primary" onClick={() => setSelectedNode(null)}>Close</button>
+            <button className="btn-primary" onClick={() => { setSelectedNode(null); onNodeHighlight?.(null); }}>
+              {t('common.close')}
+            </button>
           </div>
         </div>
       )}

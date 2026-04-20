@@ -32,7 +32,7 @@ if _vendor_init.exists():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-__version__ = "0.5.0"
+__version__ = "0.6.2"
 __author__ = "Chaobs"
 
 from ariadne.memory import VectorStore

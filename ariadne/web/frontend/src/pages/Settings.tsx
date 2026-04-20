@@ -45,6 +45,9 @@ export default function Settings() {
     try {
       await configApi.setLanguage(lang);
       setLocale(lang);
+      // Also update frontend i18n
+      localStorage.setItem('ariadne_locale', lang);
+      window.dispatchEvent(new CustomEvent('localechange', { detail: { locale: lang } }));
     } catch (err) { console.error(err); }
   }
 

@@ -19,7 +19,7 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -510,6 +510,82 @@ async def ingest_files(
     )
 
 
+@ingest_router.post("/files/stream")
+async def ingest_files_stream(
+    files: List[UploadFile] = File(...),
+    memory: Optional[str] = Query(None),
+    enrich: bool = Query(False),
+    manager: MemoryManager = Depends(get_memory_manager),
+):
+    """Ingest files with real-time SSE progress streaming."""
+    store = manager.get_store(memory)
+    total = len(files)
+    tmp_files = []
+    docs_added = 0
+    skipped = 0
+    errors = []
+
+    async def event_stream():
+        nonlocal docs_added, skipped, errors
+
+        for i, upload in enumerate(files):
+            # Emit processing event
+            progress = int((i / total) * 90)
+            yield f"event: progress\ndata: {json.dumps({'file': upload.filename, 'progress': progress, 'phase': 'processing'})}\n\n"
+
+            suffix = Path(upload.filename).suffix if upload.filename else ".txt"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, prefix="ariadne_ingest_")
+            tmp_files.append(tmp.name)
+
+            try:
+                content = await upload.read()
+                tmp.write(content)
+                tmp.close()
+
+                try:
+                    ingestor = get_ingestor(tmp.name)
+                except (ValueError, ImportError):
+                    skipped += 1
+                    yield f"event: skip\ndata: {json.dumps({'file': upload.filename})}\n\n"
+                    continue
+
+                try:
+                    docs = ingestor.ingest(tmp.name)
+                    if docs:
+                        store.add(docs)
+                        docs_added += len(docs)
+                        yield f"event: success\ndata: {json.dumps({'file': upload.filename, 'docs': len(docs)})}\n\n"
+                    else:
+                        skipped += 1
+                        yield f"event: skip\ndata: {json.dumps({'file': upload.filename})}\n\n"
+                except Exception as e:
+                    errors.append({"file": upload.filename or "unknown", "error": str(e)})
+                    yield f"event: error\ndata: {json.dumps({'file': upload.filename, 'error': str(e)})}\n\n"
+            except Exception as e:
+                errors.append({"file": upload.filename or "unknown", "error": str(e)})
+                yield f"event: error\ndata: {json.dumps({'file': upload.filename, 'error': str(e)})}\n\n"
+
+        # Final result
+        yield f"event: complete\ndata: {json.dumps({'docs_added': docs_added, 'skipped': skipped, 'errors': errors, 'total_files': total})}\n\n"
+
+        # Cleanup
+        for tmp_path in tmp_files:
+            try:
+                Path(tmp_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @ingest_router.post("/directory", response_model=IngestResultResponse)
 async def ingest_directory(
     directory: str = Query(..., description="Directory path to ingest"),
@@ -725,23 +801,101 @@ async def graph_data(
     max_nodes: int = Query(50, description="Maximum nodes to return"),
     entity_type: Optional[str] = Query(None, description="Filter by entity type"),
 ):
-    """Get knowledge graph data as nodes and edges."""
+    """Get knowledge graph data as nodes and edges, with optional entity type filter."""
     try:
         from ariadne.graph import GraphStorage
         from ariadne.advanced import GraphVisualizer
 
         graph = GraphStorage(db_path=str(GRAPH_DB_PATH))
-        visualizer = GraphVisualizer(graph)
 
-        # Get JSON data
-        json_str = visualizer.to_json(max_nodes=max_nodes)
-        data = json.loads(json_str)
+        # Get all entities
+        all_entities = graph.get_all_entities()
 
-        return GraphDataResponse(
-            nodes=data.get("nodes", []),
-            edges=data.get("edges", []),
-            stats=data.get("stats", {}),
-        )
+        # Filter by type if specified
+        if entity_type and entity_type.upper() != "ALL":
+            filtered = [e for e in all_entities if e.entity_type.value.upper() == entity_type.upper()]
+            entities = filtered[:max_nodes]
+        else:
+            entities = all_entities[:max_nodes]
+
+        entity_ids = {e.entity_id for e in entities}
+        all_relations = graph.get_all_relations()
+
+        # Build nodes
+        nodes = []
+        for entity in entities:
+            nodes.append({
+                "id": entity.entity_id,
+                "label": entity.name,
+                "type": entity.entity_type.value,
+                "description": entity.description,
+                "aliases": entity.aliases,
+            })
+
+        # Build edges (only for filtered nodes)
+        edges = []
+        for relation in all_relations:
+            if relation.source_id in entity_ids and relation.target_id in entity_ids:
+                edges.append({
+                    "id": relation.relation_id,
+                    "source": relation.source_id,
+                    "target": relation.target_id,
+                    "type": relation.relation_type.value,
+                    "description": relation.description,
+                    "label": relation.relation_type.value,
+                })
+
+        # Stats
+        type_counts: Dict[str, int] = {}
+        for e in all_entities:
+            t = e.entity_type.value
+            type_counts[t] = type_counts.get(t, 0) + 1
+
+        stats = {
+            "entities": len(all_entities),
+            "relations": len(all_relations),
+            "entity_types": type_counts,
+        }
+
+        return GraphDataResponse(nodes=nodes, edges=edges, stats=stats)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@search_router.get("/suggest")
+async def search_suggest(
+    q: str = Query(..., min_length=2, description="Search query"),
+    memory: Optional[str] = Query(None),
+    manager: MemoryManager = Depends(get_memory_manager),
+):
+    """Get search suggestions based on indexed content."""
+    try:
+        store = manager.get_store(memory)
+
+        # Get all documents and extract potential suggestions
+        # Limit to 200 docs for performance
+        docs = store.get_all_documents(limit=200)
+        suggestions: List[str] = []
+        seen = set()
+
+        # Extract meaningful phrases (3-6 words, alphanumeric)
+        import re
+        word_pattern = re.compile(r"\b[a-zA-Z\u4e00-\u9fff]{3,30}\b")
+
+        for doc in docs:
+            # Use first 500 chars for keyword extraction
+            text = doc.content[:500]
+            words = word_pattern.findall(text)
+            # Build 2-3 word phrases
+            for i in range(len(words) - 1):
+                phrase = " ".join(words[i : i + 2])
+                if phrase.lower() not in seen and q.lower() in phrase.lower():
+                    suggestions.append(phrase)
+                    seen.add(phrase.lower())
+
+        # Sort by relevance (exact prefix match first)
+        suggestions = sorted(suggestions, key=lambda s: (0 if s.lower().startswith(q.lower()) else 1, -len(s)))
+        return {"suggestions": suggestions[:10]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -819,6 +973,190 @@ async def graph_html(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@graph_router.get("/export/{format}")
+async def graph_export(
+    format: str,
+    max_nodes: int = Query(50),
+    title: str = Query("Knowledge Graph Export"),
+):
+    """
+    Export knowledge graph in multiple formats.
+    Supported formats: html, markdown, docx, svg, json, mermaid
+    """
+    try:
+        from ariadne.graph import GraphStorage
+        from ariadne.advanced import GraphVisualizer, Exporter
+
+        graph = GraphStorage(db_path=str(GRAPH_DB_PATH))
+        cfg = get_config()
+        ext_map = {
+            "html": ".html",
+            "markdown": ".md",
+            "docx": ".docx",
+            "svg": ".svg",
+            "json": ".json",
+            "mermaid": ".mm",
+        }
+
+        if format not in ext_map:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported format: {format}. Supported: {list(ext_map.keys())}",
+            )
+
+        ext = ext_map[format]
+        tmp_path = Path(tempfile.mkdtemp(prefix="ariadne_export_")) / f"graph{ext}"
+
+        if format == "html":
+            visualizer = GraphVisualizer(graph, cfg)
+            content = visualizer.to_html(title=title, max_nodes=max_nodes)
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            media_type = "text/html"
+            filename = f"graph{ext}"
+
+        elif format == "markdown":
+            exporter = Exporter(graph=graph, config=cfg)
+            content = exporter._to_markdown(title, include_graph=True, language="en")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            media_type = "text/markdown"
+            filename = f"graph{ext}"
+
+        elif format == "docx":
+            exporter = Exporter(graph=graph, config=cfg)
+            path = exporter._to_docx(title, include_graph=True, language="en", output_path=str(tmp_path))
+            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            filename = Path(path).name
+
+        elif format == "svg":
+            visualizer = GraphVisualizer(graph, cfg)
+            dot = visualizer.to_dot(max_nodes=max_nodes)
+            # Convert DOT to SVG-like text representation
+            svg_content = _dot_to_svg(dot, title=title, max_nodes=max_nodes)
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(svg_content)
+            media_type = "image/svg+xml"
+            filename = f"graph{ext}"
+
+        elif format == "json":
+            visualizer = GraphVisualizer(graph, cfg)
+            content = visualizer.to_json(max_nodes=max_nodes)
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            media_type = "application/json"
+            filename = f"graph{ext}"
+
+        elif format == "mermaid":
+            visualizer = GraphVisualizer(graph, cfg)
+            content = visualizer.to_mermaid(max_nodes=max_nodes)
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            media_type = "text/plain"
+            filename = f"graph{ext}"
+
+        return FileResponse(
+            path=str(tmp_path),
+            filename=filename,
+            media_type=media_type,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _dot_to_svg(dot: str, title: str = "Knowledge Graph", max_nodes: int = 50) -> str:
+    """Convert DOT string to a simple SVG representation."""
+    # Parse DOT to extract nodes and edges
+    import re
+
+    lines = dot.split("\n")
+    nodes = []
+    edges = []
+    in_edges = False
+
+    for line in lines:
+        line = line.strip()
+        if "->" in line:
+            # Parse edge: "src" -> "tgt" [label="...", ...]
+            match = re.match(r'"([^"]+)"\s*->\s*"([^"]+)"', line)
+            if match:
+                src, tgt = match.groups()
+                label_match = re.search(r'label="([^"]+)"', line)
+                edges.append((src, tgt, label_match.group(1) if label_match else ""))
+        elif line.startswith('"') and "[" in line:
+            # Parse node: "id" [label="name", ...]
+            match = re.match(r'"([^"]+)"\s*\[.*?label="([^"]+)"', line)
+            if match:
+                node_id, label = match.groups()
+                nodes.append((node_id, label[:30]))
+
+    # Generate SVG
+    n = len(nodes)
+    if n == 0:
+        return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400"><text x="300" y="200" text-anchor="middle" fill="#999">No entities</text></svg>'
+
+    cols = min(6, n)
+    rows = (n + cols - 1) // cols
+    node_w, node_h = 110, 50
+    padding = 20
+    svg_w = cols * (node_w + padding) + padding
+    svg_h = rows * (node_h + padding * 2) + 60
+
+    type_colors = {
+        "person": "#5e6ad2",
+        "organization": "#2ea44f",
+        "location": "#f59e0b",
+        "concept": "#e03e3e",
+        "technology": "#9333ea",
+        "event": "#06b6d4",
+        "work": "#ffc107",
+        "topic": "#607d8b",
+        "unknown": "#6e6e73",
+    }
+
+    svg_lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="{svg_w}" height="{svg_h}">',
+        f'  <rect width="{svg_w}" height="{svg_h}" fill="#fafafa"/>',
+        f'  <text x="{svg_w//2}" y="30" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="bold" fill="#333">{title}</text>',
+    ]
+
+    for i, (node_id, label) in enumerate(nodes):
+        col = i % cols
+        row = i // cols
+        x = padding + col * (node_w + padding)
+        y = 50 + padding + row * (node_h + padding * 2)
+        svg_lines.append(
+            f'  <rect x="{x}" y="{y}" width="{node_w}" height="{node_h}" rx="8" fill="#6e6e73" stroke="#fff" stroke-width="2"/>'
+        )
+        svg_lines.append(
+            f'  <text x="{x + node_w//2}" y="{y + node_h//2 + 5}" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#fff">{label}</text>'
+        )
+
+    for src, tgt, label in edges:
+        src_i = next((i for i, (nid, _) in enumerate(nodes) if nid == src), -1)
+        tgt_i = next((i for i, (nid, _) in enumerate(nodes) if nid == tgt), -1)
+        if src_i >= 0 and tgt_i >= 0:
+            sc, sr = src_i % cols, src_i // cols
+            tc, tr = tgt_i % cols, tgt_i // cols
+            sx = padding + sc * (node_w + padding) + node_w // 2
+            sy = 50 + padding + sr * (node_h + padding * 2) + node_h
+            tx = padding + tc * (node_w + padding) + node_w // 2
+            ty = 50 + padding + tr * (node_h + padding * 2)
+            mx = (sx + tx) // 2
+            my = (sy + ty) // 2
+            svg_lines.append(f'  <line x1="{sx}" y1="{sy}" x2="{tx}" y2="{ty}" stroke="#aaa" stroke-width="1.5"/>')
+            if label:
+                svg_lines.append(
+                    f'  <text x="{mx}" y="{my - 5}" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#666">{label}</text>'
+                )
+
+    svg_lines.append(f'  <text x="{svg_w//2}" y="{svg_h - 10}" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#999">Generated by Ariadne | {n} entities</text>')
+    svg_lines.append("</svg>")
+    return "\n".join(svg_lines)
 
 
 # ============================================================================

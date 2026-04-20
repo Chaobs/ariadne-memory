@@ -16,23 +16,66 @@ export async function* ingestWithProgress(
   if (memory) formData.append('memory', memory);
   if (enrich) formData.append('enrich', 'true');
 
-  const response = await fetch(`${API_BASE}/ingest/files?enrich=${enrich ?? false}${memory ? `&memory=${memory}` : ''}`, {
-    method: 'POST',
-    body: formData,
-  });
+  const response = await fetch(
+    `${API_BASE}/ingest/files/stream?memory=${encodeURIComponent(memory || '')}&enrich=${enrich ?? false}`,
+    { method: 'POST', body: formData }
+  );
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
 
-  const result: IngestResultResponse = await response.json();
-  yield { type: 'complete', result };
-  return result;
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  if (!reader) throw new Error('No response body');
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (line.startsWith('event:') || line.startsWith('data:')) {
+        const eventMatch = line.match(/^event:\s*(\w+)/);
+        const dataMatch = line.match(/^data:\s*(.+)/);
+        if (dataMatch) {
+          try {
+            const data = JSON.parse(dataMatch[1]);
+            if (eventMatch?.[1] === 'complete') {
+              const result: IngestResultResponse = data;
+              yield { type: 'complete', result };
+              return result;
+            } else if (eventMatch?.[1] === 'progress') {
+              yield { type: 'progress', ...data };
+            } else if (eventMatch?.[1] === 'success') {
+              yield { type: 'success', ...data };
+            } else if (eventMatch?.[1] === 'error') {
+              yield { type: 'error', ...data };
+            } else if (eventMatch?.[1] === 'skip') {
+              yield { type: 'skip', ...data };
+            }
+          } catch {}
+        }
+      }
+    }
+  }
+
+  throw new Error('Stream ended without complete event');
 }
 
 export interface IngestProgressEvent {
-  type: 'complete';
-  result: IngestResultResponse;
+  type: 'complete' | 'progress' | 'success' | 'error' | 'skip';
+  result?: IngestResultResponse;
+  file?: string;
+  progress?: number;
+  phase?: string;
+  docs?: number;
+  error?: string;
 }
 
 // Type definitions
@@ -162,15 +205,20 @@ export const searchApi = {
       method: 'POST',
       body: JSON.stringify({ query, top_k: topK, fetch_k: fetchK, alpha, memory }),
     }),
+
+  suggest: (q: string, memory?: string) =>
+    fetchJSON<{ suggestions: string[] }>(
+      `${API_BASE}/search/suggest?q=${encodeURIComponent(q)}${memory ? `&memory=${encodeURIComponent(memory)}` : ''}`
+    ),
 };
 
 // Graph API
 export const graphApi = {
   status: () => fetchJSON<GraphStatus>(`${API_BASE}/graph/status`),
 
-  getData: (maxNodes = 50) =>
-    fetchJSON<{ nodes: GraphNode[]; edges: GraphEdge[]; stats: { entities: number; relations: number } }>(
-      `${API_BASE}/graph/data?max_nodes=${maxNodes}`
+  getData: (maxNodes = 50, entityType?: string) =>
+    fetchJSON<{ nodes: GraphNode[]; edges: GraphEdge[]; stats: { entities: number; relations: number; entity_types?: Record<string, number> } }>(
+      `${API_BASE}/graph/data?max_nodes=${maxNodes}${entityType ? `&entity_type=${encodeURIComponent(entityType)}` : ''}`
     ),
 
   enrich: (memory?: string, limit = 100) =>
@@ -178,18 +226,32 @@ export const graphApi = {
       method: 'POST',
       body: JSON.stringify({ memory, limit, force: false }),
     }),
+
+  /** Download graph export as a file (HTML, Markdown, DOCX, SVG, JSON, Mermaid) */
+  downloadExport: (format: string, maxNodes = 50, title = 'Knowledge Graph Export') => {
+    const url = `${API_BASE}/graph/export/${format}?max_nodes=${maxNodes}&title=${encodeURIComponent(title)}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `graph.${format === 'markdown' ? 'md' : format === 'mermaid' ? 'mm' : format}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  },
 };
 
 export interface GraphNode {
   id: string;
   label: string;
   type: string;
+  description?: string;
+  aliases?: string[];
 }
 
 export interface GraphEdge {
   source: string;
   target: string;
   label?: string;
+  type?: string;
 }
 
 // Ingest API
