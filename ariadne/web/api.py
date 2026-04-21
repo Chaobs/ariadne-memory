@@ -474,11 +474,13 @@ async def ingest_files(
                         "file": upload.filename or "unknown",
                         "error": str(e),
                     })
+                    get_session_logger().error("ingest_error", file=upload.filename or "unknown", error=str(e))
             except Exception as e:
                 errors.append({
                     "file": upload.filename or "unknown",
                     "error": str(e),
                 })
+                get_session_logger().error("ingest_error", file=upload.filename or "unknown", error=str(e))
 
         # Optional graph enrichment
         if enrich and docs_added > 0:
@@ -648,6 +650,7 @@ async def ingest_directory(
     manager: MemoryManager = Depends(get_memory_manager),
 ):
     """Ingest all supported files from a directory."""
+    get_session_logger().info("ingest_directory", directory=directory, memory=memory)
     dir_path = Path(directory)
     if not dir_path.exists() or not dir_path.is_dir():
         raise HTTPException(status_code=400, detail=f"Directory not found: {directory}")
@@ -687,11 +690,13 @@ async def ingest_directory(
                     "file": str(file_path),
                     "error": str(e),
                 })
+                get_session_logger().error("ingest_dir_error", file=str(file_path), error=str(e))
         except Exception as e:
             errors.append({
                 "file": str(file_path),
                 "error": str(e),
             })
+            get_session_logger().error("ingest_dir_error", file=str(file_path), error=str(e))
 
     # Optional graph enrichment
     if enrich and docs_added > 0:
