@@ -1276,7 +1276,13 @@ def web_info():
 
 def main():
     """Entry point for the Ariadne CLI."""
-    app()
+    from ariadne.logging import get_session_logger
+    session_log = get_session_logger()
+    session_log.start("cli", args=" ".join(sys.argv[1:]))
+    try:
+        app()
+    finally:
+        session_log.shutdown()
 
 
 if __name__ == "__main__":

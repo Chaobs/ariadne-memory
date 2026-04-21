@@ -37,6 +37,7 @@ from ariadne.ingest import get_ingestor
 from ariadne.config import AriadneConfig, get_config, reload_config
 from ariadne.i18n import init_locale, get_locale, available_locales, set_locale, get_locale_display
 from ariadne.paths import MEMORIES_DIR, GRAPH_DB_PATH
+from ariadne.logging import get_session_logger
 
 
 # ============================================================================
@@ -252,6 +253,7 @@ async def create_memory(
     manager: MemoryManager = Depends(get_memory_manager),
 ):
     """Create a new memory system."""
+    get_session_logger().info("memory_create", name=req.name)
     try:
         manager.create(req.name, req.description)
         info = manager.get_info(req.name)
@@ -287,6 +289,7 @@ async def delete_memory(
     manager: MemoryManager = Depends(get_memory_manager),
 ):
     """Delete a memory system."""
+    get_session_logger().info("memory_delete", name=name)
     if name == manager.DEFAULT_COLLECTION:
         raise HTTPException(status_code=400, detail="Cannot delete the default memory system")
     try:
@@ -523,67 +526,74 @@ async def ingest_files_stream(
     manager: MemoryManager = Depends(get_memory_manager),
 ):
     """Ingest files with real-time SSE progress streaming."""
+    get_session_logger().info("ingest_stream", file_count=len(files), memory=memory)
     target = memory or manager.DEFAULT_COLLECTION
 
     async def event_stream():
-        try:
-            store = manager.get_store(target)
-        except Exception as e:
-            yield f"event: error\ndata: {json.dumps({'error': f'Memory system error: {e}'})}\n\n"
-            yield f"event: complete\ndata: {json.dumps({'docs_added': 0, 'skipped': 0, 'errors': [], 'total_files': len(files)})}\n\n"
-            return
-
-        total = len(files)
         docs_added = 0
         skipped = 0
         errors = []
-        tmp_files = []
+        total = len(files)
 
-        for i, upload in enumerate(files):
-            # Emit processing event
-            progress = int((i / total) * 90)
-            yield f"event: progress\ndata: {json.dumps({'file': upload.filename, 'progress': progress, 'phase': 'processing'})}\n\n"
-
-            suffix = Path(upload.filename).suffix if upload.filename else ".txt"
-            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, prefix="ariadne_ingest_")
-            tmp_files.append(tmp.name)
-
+        try:
             try:
-                content = await upload.read()
-                tmp.write(content)
-                tmp.close()
+                store = manager.get_store(target)
+            except Exception as e:
+                yield f"event: error\ndata: {json.dumps({'error': f'Memory system error: {e}'})}\n\n"
+                return
+
+            tmp_files = []
+
+            for i, upload in enumerate(files):
+                # Emit processing event
+                progress = int((i / total) * 90)
+                yield f"event: progress\ndata: {json.dumps({'file': upload.filename, 'progress': progress, 'phase': 'processing'})}\n\n"
+
+                suffix = Path(upload.filename).suffix if upload.filename else ".txt"
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, prefix="ariadne_ingest_")
+                tmp_files.append(tmp.name)
 
                 try:
-                    ingestor = get_ingestor(tmp.name)
-                except (ValueError, ImportError):
-                    skipped += 1
-                    yield f"event: skip\ndata: {json.dumps({'file': upload.filename, 'reason': 'Unsupported file type'})}\n\n"
-                    continue
+                    content = await upload.read()
+                    tmp.write(content)
+                    tmp.close()
 
-                try:
-                    docs = ingestor.ingest(tmp.name)
-                    if docs:
-                        store.add(docs)
-                        docs_added += len(docs)
-                        yield f"event: success\ndata: {json.dumps({'file': upload.filename, 'docs': len(docs)})}\n\n"
-                    else:
+                    try:
+                        ingestor = get_ingestor(tmp.name)
+                    except (ValueError, ImportError):
                         skipped += 1
-                        yield f"event: skip\ndata: {json.dumps({'file': upload.filename, 'reason': 'No content extracted'})}\n\n"
+                        yield f"event: skip\ndata: {json.dumps({'file': upload.filename, 'reason': 'Unsupported file type'})}\n\n"
+                        continue
+
+                    try:
+                        docs = ingestor.ingest(tmp.name)
+                        if docs:
+                            store.add(docs)
+                            docs_added += len(docs)
+                            yield f"event: success\ndata: {json.dumps({'file': upload.filename, 'docs': len(docs)})}\n\n"
+                        else:
+                            skipped += 1
+                            yield f"event: skip\ndata: {json.dumps({'file': upload.filename, 'reason': 'No content extracted'})}\n\n"
+                    except Exception as e:
+                        errors.append({"file": upload.filename or "unknown", "error": str(e)})
+                        yield f"event: error\ndata: {json.dumps({'file': upload.filename, 'error': str(e)})}\n\n"
                 except Exception as e:
                     errors.append({"file": upload.filename or "unknown", "error": str(e)})
                     yield f"event: error\ndata: {json.dumps({'file': upload.filename, 'error': str(e)})}\n\n"
-            except Exception as e:
-                errors.append({"file": upload.filename or "unknown", "error": str(e)})
-                yield f"event: error\ndata: {json.dumps({'file': upload.filename, 'error': str(e)})}\n\n"
 
-            # Cleanup temp file per iteration
-            try:
-                Path(tmp.name).unlink(missing_ok=True)
-            except OSError:
-                pass
+                # Cleanup temp file per iteration
+                try:
+                    Path(tmp.name).unlink(missing_ok=True)
+                except OSError:
+                    pass
 
-        # Final result
-        yield f"event: complete\ndata: {json.dumps({'docs_added': docs_added, 'skipped': skipped, 'errors': errors, 'total_files': total})}\n\n"
+        finally:
+            # ALWAYS send complete event — even if an uncaught exception occurs
+            get_session_logger().info(
+                "ingest_complete", docs_added=docs_added, skipped=skipped,
+                errors=len(errors), total_files=total
+            )
+            yield f"event: complete\ndata: {json.dumps({'docs_added': docs_added, 'skipped': skipped, 'errors': errors, 'total_files': total})}\n\n"
 
     return StreamingResponse(
         event_stream(),
@@ -694,6 +704,7 @@ async def semantic_search(
     manager: MemoryManager = Depends(get_memory_manager),
 ):
     """Perform semantic search across a memory system."""
+    get_session_logger().info("search_semantic", query=req.query[:50], memory=req.memory)
     try:
         store = manager.get_store(req.memory)
         target = req.memory or manager.DEFAULT_COLLECTION
@@ -722,6 +733,7 @@ async def rag_search(
     manager: MemoryManager = Depends(get_memory_manager),
 ):
     """Perform RAG search with hybrid vector+BM25 retrieval and reranking."""
+    get_session_logger().info("search_rag", query=req.query[:50], memory=req.memory)
     try:
         from ariadne.rag import create_rag_engine
     except ImportError:
@@ -1482,12 +1494,21 @@ def run_server(host: str = "127.0.0.1", port: int = 8770, reload: bool = False):
     """Run the Ariadne web server."""
     import uvicorn
 
+    # Start session logging
+    session_log = get_session_logger()
+    session_log.start("web", host=host, port=port, version=__version__)
+
     static_dir = Path(__file__).parent / "static"
-    if static_dir.exists():
-        app = create_app()
-        # SPAStaticFiles: serves static assets + index.html fallback for SPA routing
-        app.mount("/", SPAStaticFiles(directory=str(static_dir), html=True), name="static")
-        uvicorn.run(app, host=host, port=port)
-    else:
-        # API-only mode (frontend not built yet)
-        uvicorn.run("ariadne.web.api:create_app", host=host, port=port, reload=reload, factory=True)
+    try:
+        if static_dir.exists():
+            app = create_app()
+            # SPAStaticFiles: serves static assets + index.html fallback for SPA routing
+            app.mount("/", SPAStaticFiles(directory=str(static_dir), html=True), name="static")
+            session_log.info("server_start", mode="spa", static_dir=str(static_dir))
+            uvicorn.run(app, host=host, port=port)
+        else:
+            # API-only mode (frontend not built yet)
+            session_log.info("server_start", mode="api_only")
+            uvicorn.run("ariadne.web.api:create_app", host=host, port=port, reload=reload, factory=True)
+    finally:
+        session_log.shutdown()

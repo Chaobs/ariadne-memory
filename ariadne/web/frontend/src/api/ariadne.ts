@@ -6,6 +6,15 @@
 const API_BASE = '/api';
 
 // SSE (Server-Sent Events) for real-time ingestion progress
+//
+// IMPORTANT: SSE protocol sends event type and data on separate lines:
+//   event: complete\n
+//   data: {"docs_added": 1}\n
+//   \n
+// We must track the current event name across lines so that when we
+// encounter a `data:` line, we know which event type it belongs to.
+// Previous code processed each line independently, causing event names
+// and data to never match — resulting in "Stream ended without complete event".
 export async function* ingestWithProgress(
   files: File[],
   memory?: string,
@@ -28,8 +37,41 @@ export async function* ingestWithProgress(
   const reader = response.body?.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let currentEvent = '';  // Track event name across lines
 
   if (!reader) throw new Error('No response body');
+
+  function processLine(line: string): IngestProgressEvent | null {
+    const eventMatch = line.match(/^event:\s*(\w+)/);
+    const dataMatch = line.match(/^data:\s*(.+)/);
+
+    if (eventMatch) {
+      currentEvent = eventMatch[1];
+      return null;  // Event line just updates currentEvent; data follows on next line
+    }
+
+    if (dataMatch && currentEvent) {
+      try {
+        const data = JSON.parse(dataMatch[1]);
+        if (currentEvent === 'complete') {
+          return { type: 'complete', result: data };
+        } else if (currentEvent === 'progress') {
+          return { type: 'progress', ...data };
+        } else if (currentEvent === 'success') {
+          return { type: 'success', ...data };
+        } else if (currentEvent === 'error') {
+          return { type: 'error', ...data };
+        } else if (currentEvent === 'skip') {
+          return { type: 'skip', ...data };
+        }
+      } catch (e) {
+        console.error('SSE data parse error:', e);
+      }
+      currentEvent = '';  // Reset after consuming data
+    }
+
+    return null;
+  }
 
   while (true) {
     const { done, value } = await reader.read();
@@ -40,28 +82,26 @@ export async function* ingestWithProgress(
     buffer = lines.pop() ?? '';
 
     for (const line of lines) {
-      if (line.startsWith('event:') || line.startsWith('data:')) {
-        const eventMatch = line.match(/^event:\s*(\w+)/);
-        const dataMatch = line.match(/^data:\s*(.+)/);
-        if (dataMatch) {
-          try {
-            const data = JSON.parse(dataMatch[1]);
-            if (eventMatch?.[1] === 'complete') {
-              const result: IngestResultResponse = data;
-              yield { type: 'complete', result };
-              return result;
-            } else if (eventMatch?.[1] === 'progress') {
-              yield { type: 'progress', ...data };
-            } else if (eventMatch?.[1] === 'success') {
-              yield { type: 'success', ...data };
-            } else if (eventMatch?.[1] === 'error') {
-              yield { type: 'error', ...data };
-            } else if (eventMatch?.[1] === 'skip') {
-              yield { type: 'skip', ...data };
-            }
-          } catch {}
+      const event = processLine(line);
+      if (event) {
+        if (event.type === 'complete') {
+          yield event;
+          return event.result!;
         }
+        yield event;
       }
+    }
+  }
+
+  // Process any remaining data in buffer after stream closes
+  if (buffer.trim()) {
+    const event = processLine(buffer);
+    if (event) {
+      if (event.type === 'complete') {
+        yield event;
+        return event.result!;
+      }
+      yield event;
     }
   }
 
