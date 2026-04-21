@@ -433,6 +433,7 @@ async def ingest_files(
     manager: MemoryManager = Depends(get_memory_manager),
 ):
     """Ingest uploaded files into a memory system."""
+    get_session_logger().info("ingest_files", file_count=len(files), memory=memory)
     store = manager.get_store(memory)
     target = memory or manager.DEFAULT_COLLECTION
 
@@ -525,15 +526,42 @@ async def ingest_files_stream(
     enrich: bool = Query(False),
     manager: MemoryManager = Depends(get_memory_manager),
 ):
-    """Ingest files with real-time SSE progress streaming."""
+    """Ingest files with real-time SSE progress streaming.
+
+    IMPORTANT: We must read all UploadFile contents BEFORE returning the
+    StreamingResponse. UploadFile's underlying SpooledTemporaryFile is tied
+    to the request lifecycle — once the response starts streaming, the request
+    scope may be cleaned up and the file handles closed, causing "read of
+    closed file" / "I/O operation on closed file" errors.
+    """
     get_session_logger().info("ingest_stream", file_count=len(files), memory=memory)
     target = memory or manager.DEFAULT_COLLECTION
+
+    # Eagerly read all uploaded files into temp files BEFORE streaming starts.
+    # This avoids "read of closed file" errors when the async generator runs
+    # after the request scope has been cleaned up.
+    upload_entries: List[Dict] = []  # [{filename, tmp_path}]
+    for upload in files:
+        suffix = Path(upload.filename).suffix if upload.filename else ".txt"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, prefix="ariadne_ingest_")
+        try:
+            content = await upload.read()
+            tmp.write(content)
+            tmp.close()
+            upload_entries.append({"filename": upload.filename, "tmp_path": tmp.name})
+        except Exception as e:
+            tmp.close()
+            try:
+                Path(tmp.name).unlink(missing_ok=True)
+            except OSError:
+                pass
+            upload_entries.append({"filename": upload.filename, "tmp_path": None, "error": str(e)})
 
     async def event_stream():
         docs_added = 0
         skipped = 0
         errors = []
-        total = len(files)
+        total = len(upload_entries)
 
         try:
             try:
@@ -542,48 +570,52 @@ async def ingest_files_stream(
                 yield f"event: error\ndata: {json.dumps({'error': f'Memory system error: {e}'})}\n\n"
                 return
 
-            tmp_files = []
+            for i, entry in enumerate(upload_entries):
+                filename = entry["filename"]
+                tmp_path = entry["tmp_path"]
 
-            for i, upload in enumerate(files):
                 # Emit processing event
                 progress = int((i / total) * 90)
-                yield f"event: progress\ndata: {json.dumps({'file': upload.filename, 'progress': progress, 'phase': 'processing'})}\n\n"
+                yield f"event: progress\ndata: {json.dumps({'file': filename, 'progress': progress, 'phase': 'processing'})}\n\n"
 
-                suffix = Path(upload.filename).suffix if upload.filename else ".txt"
-                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, prefix="ariadne_ingest_")
-                tmp_files.append(tmp.name)
+                # Check if pre-read failed
+                if tmp_path is None:
+                    pre_error = entry.get("error", "Failed to read uploaded file")
+                    skipped += 1
+                    errors.append({"file": filename, "error": pre_error})
+                    get_session_logger().error("ingest_read_failed", file=filename, error=pre_error)
+                    yield f"event: error\ndata: {json.dumps({'file': filename, 'error': pre_error})}\n\n"
+                    continue
 
                 try:
-                    content = await upload.read()
-                    tmp.write(content)
-                    tmp.close()
-
                     try:
-                        ingestor = get_ingestor(tmp.name)
+                        ingestor = get_ingestor(tmp_path)
                     except (ValueError, ImportError):
                         skipped += 1
-                        yield f"event: skip\ndata: {json.dumps({'file': upload.filename, 'reason': 'Unsupported file type'})}\n\n"
+                        yield f"event: skip\ndata: {json.dumps({'file': filename, 'reason': 'Unsupported file type'})}\n\n"
                         continue
 
                     try:
-                        docs = ingestor.ingest(tmp.name)
+                        docs = ingestor.ingest(tmp_path)
                         if docs:
                             store.add(docs)
                             docs_added += len(docs)
-                            yield f"event: success\ndata: {json.dumps({'file': upload.filename, 'docs': len(docs)})}\n\n"
+                            yield f"event: success\ndata: {json.dumps({'file': filename, 'docs': len(docs)})}\n\n"
                         else:
                             skipped += 1
-                            yield f"event: skip\ndata: {json.dumps({'file': upload.filename, 'reason': 'No content extracted'})}\n\n"
+                            yield f"event: skip\ndata: {json.dumps({'file': filename, 'reason': 'No content extracted'})}\n\n"
                     except Exception as e:
-                        errors.append({"file": upload.filename or "unknown", "error": str(e)})
-                        yield f"event: error\ndata: {json.dumps({'file': upload.filename, 'error': str(e)})}\n\n"
+                        errors.append({"file": filename, "error": str(e)})
+                        get_session_logger().error("ingest_error", file=filename, error=str(e))
+                        yield f"event: error\ndata: {json.dumps({'file': filename, 'error': str(e)})}\n\n"
                 except Exception as e:
-                    errors.append({"file": upload.filename or "unknown", "error": str(e)})
-                    yield f"event: error\ndata: {json.dumps({'file': upload.filename, 'error': str(e)})}\n\n"
+                    errors.append({"file": filename, "error": str(e)})
+                    get_session_logger().error("ingest_error", file=filename, error=str(e))
+                    yield f"event: error\ndata: {json.dumps({'file': filename, 'error': str(e)})}\n\n"
 
                 # Cleanup temp file per iteration
                 try:
-                    Path(tmp.name).unlink(missing_ok=True)
+                    Path(tmp_path).unlink(missing_ok=True)
                 except OSError:
                     pass
 
