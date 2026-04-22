@@ -2,6 +2,7 @@
 MCP Server implementation for Ariadne.
 
 Provides a complete MCP server with tools, resources, and prompts.
+Includes WAL audit logging, parameter validation, and cache invalidation detection.
 """
 
 import json
@@ -9,6 +10,11 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable
 from dataclasses import dataclass, field, asdict
+
+# Import new MCP enhancements
+from ariadne.mcp.wal import WALAuditLogger, OperationType, LogLevel, WALEntry
+from ariadne.mcp.validation import SchemaValidator, ValidationError
+from ariadne.mcp.cache import MCPCacheManager, CacheInvalidationDetector
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +182,11 @@ class AriadneMCPServer:
     This server exposes Ariadne's capabilities as MCP tools, resources,
     and prompts that can be consumed by any MCP-compatible client.
 
+    Features:
+    - WAL Audit Logging: All operations are logged for auditing
+    - Parameter Validation: JSON Schema validation for all tool parameters
+    - Cache Invalidation Detection: Tracks source files for cache invalidation
+
     Example usage:
         # Create and run server
         server = AriadneMCPServer(
@@ -195,6 +206,10 @@ class AriadneMCPServer:
         graph_db_path: str = "./data/graph.db",
         config_path: Optional[str] = None,
         log_level: str = "INFO",
+        enable_wal: bool = True,
+        enable_validation: bool = True,
+        enable_cache: bool = True,
+        wal_db_path: Optional[str] = None,
     ):
         """Initialize Ariadne MCP Server."""
         self.vector_store_path = Path(vector_store_path)
@@ -216,6 +231,28 @@ class AriadneMCPServer:
         # Initialize Ariadne components (lazy import)
         self._vector_store = None
         self._graph_storage = None
+
+        # Initialize MCP enhancements
+        self._enable_wal = enable_wal
+        self._enable_validation = enable_validation
+        self._enable_cache = enable_cache
+
+        # WAL Audit Logger
+        self._wal: Optional[WALAuditLogger] = None
+        if enable_wal:
+            wal_path = wal_db_path or str(Path.cwd() / ".ariadne" / "wal.db")
+            self._wal = WALAuditLogger.get_instance(db_path=wal_path)
+
+        # Parameter validators for each tool
+        self._validators: Dict[str, SchemaValidator] = {}
+
+        # Cache manager
+        self._cache_manager: Optional[MCPCacheManager] = None
+        if enable_cache:
+            self._cache_manager = MCPCacheManager(wal_logger=self._wal)
+
+        # Tool schemas for validation
+        self._tool_schemas: Dict[str, Dict[str, Any]] = {}
 
         logger.info("Ariadne MCP Server initialized")
 
@@ -243,10 +280,23 @@ class AriadneMCPServer:
                 logger.warning(f"Could not load graph storage: {e}")
         return self._graph_storage
 
-    def register_tool(self, name: str, handler: Callable, schema: Dict[str, Any], description: str = ""):
-        """Register a tool."""
+    def register_tool(
+        self,
+        name: str,
+        handler: Callable,
+        schema: Dict[str, Any],
+        description: str = "",
+    ):
+        """Register a tool with optional schema validation."""
         self._tools[name] = handler
-        logger.info(f"Registered tool: {name}")
+
+        # Store schema for validation
+        if self._enable_validation and schema:
+            self._tool_schemas[name] = schema
+            self._validators[name] = SchemaValidator(schema)
+            logger.info(f"Registered tool: {name} with schema validation")
+        else:
+            logger.info(f"Registered tool: {name}")
 
     def register_resource(self, resource: MCPResource):
         """Register a resource."""
@@ -259,38 +309,86 @@ class AriadneMCPServer:
         logger.info(f"Registered prompt: {prompt.name}")
 
     def handle_request(self, message: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle incoming MCP request."""
+        """Handle incoming MCP request with WAL audit and validation."""
         try:
             msg = MCPMessage.from_dict(message)
             method = msg.method
+            client_info = msg.params.get("clientInfo") if msg.params else None
 
-            if method == "initialize":
-                result = self._handle_initialize(msg.params or {})
-            elif method == "tools/list":
-                result = self._handle_tools_list()
-            elif method == "tools/call":
-                result = self._handle_tools_call(msg.params or {})
-            elif method == "resources/list":
-                result = self._handle_resources_list()
-            elif method == "resources/read":
-                result = self._handle_resources_read(msg.params or {})
-            elif method == "prompts/list":
-                result = self._handle_prompts_list()
-            elif method == "prompts/get":
-                result = self._handle_prompts_get(msg.params or {})
-            elif method == "ping":
-                result = {"pong": True}
+            # Determine operation type for WAL
+            op_type = self._method_to_operation_type(method)
+
+            # Wrap in WAL logging
+            if self._wal and self._enable_wal:
+                with self._wal.log_operation(
+                    operation=method,
+                    operation_type=op_type,
+                    params=msg.params,
+                    client_info=client_info,
+                ) as entry:
+                    result = self._dispatch_request(msg)
+                    entry.result = result
+                    return MCPMessage(id=msg.id, result=result).to_dict()
             else:
-                raise ValueError(f"Unknown method: {method}")
+                result = self._dispatch_request(msg)
+                return MCPMessage(id=msg.id, result=result).to_dict()
 
-            return MCPMessage(id=msg.id, result=result).to_dict()
-
+        except ValidationError as e:
+            logger.warning(f"Validation error: {e}")
+            if self._wal:
+                self._wal.log_validation_error(
+                    operation=method,
+                    params=msg.params or {},
+                    error=str(e),
+                    schema_errors=e.errors,
+                )
+            return MCPMessage(
+                id=message.get("id"),
+                error={"code": -32602, "message": str(e), "data": {"errors": e.errors}},
+            ).to_dict()
         except Exception as e:
             logger.error(f"Error handling request: {e}")
             return MCPMessage(
                 id=message.get("id"),
                 error={"code": -32603, "message": str(e)},
             ).to_dict()
+
+    def _dispatch_request(self, msg: MCPMessage) -> Dict[str, Any]:
+        """Dispatch request to appropriate handler."""
+        method = msg.method
+        params = msg.params or {}
+
+        if method == "initialize":
+            return self._handle_initialize(params)
+        elif method == "tools/list":
+            return self._handle_tools_list()
+        elif method == "tools/call":
+            return self._handle_tools_call(params)
+        elif method == "resources/list":
+            return self._handle_resources_list()
+        elif method == "resources/read":
+            return self._handle_resources_read(params)
+        elif method == "prompts/list":
+            return self._handle_prompts_list()
+        elif method == "prompts/get":
+            return self._handle_prompts_get(params)
+        elif method == "ping":
+            return {"pong": True}
+        else:
+            raise ValueError(f"Unknown method: {method}")
+
+    def _method_to_operation_type(self, method: str) -> OperationType:
+        """Map MCP method to WAL operation type."""
+        mapping = {
+            "initialize": OperationType.TOOL_CALL,
+            "tools/list": OperationType.TOOL_LIST,
+            "tools/call": OperationType.TOOL_CALL,
+            "resources/list": OperationType.RESOURCE_LIST,
+            "resources/read": OperationType.RESOURCE_READ,
+            "prompts/list": OperationType.PROMPT_LIST,
+            "prompts/get": OperationType.PROMPT_GET,
+        }
+        return mapping.get(method, OperationType.TOOL_CALL)
 
     def _handle_initialize(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle initialize."""
@@ -395,15 +493,51 @@ class AriadneMCPServer:
         return {"tools": tools}
 
     def _handle_tools_call(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle tools/call."""
+        """Handle tools/call with parameter validation."""
         tool_name = params.get("name")
         arguments = params.get("arguments", {})
+
+        # Validate parameters if validator exists
+        if self._enable_validation and tool_name in self._validators:
+            validator = self._validators[tool_name]
+            errors = validator.validate(arguments)
+            if errors:
+                error_msg = f"Parameter validation failed for tool '{tool_name}'"
+                if self._wal:
+                    self._wal.log_validation_error(
+                        operation=tool_name,
+                        params=arguments,
+                        error=error_msg,
+                        schema_errors=errors,
+                    )
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps({
+                                "error": error_msg,
+                                "errors": errors,
+                                "tool": tool_name,
+                            }, ensure_ascii=False, indent=2),
+                        }
+                    ],
+                    "isError": True,
+                }
+
+        # Check cache for read operations
+        cache_hit = False
+        if self._cache_manager and tool_name in ("ariadne_search", "ariadne_stats"):
+            # These operations can be cached
+            pass  # Cache logic handled in tool implementations
 
         try:
             if tool_name == "ariadne_search":
                 result = self._tool_search(arguments)
             elif tool_name == "ariadne_ingest":
                 result = self._tool_ingest(arguments)
+                # Invalidate cache on ingest
+                if self._cache_manager:
+                    self._cache_manager._detector.invalidate_pattern("search:*")
             elif tool_name == "ariadne_graph_query":
                 result = self._tool_graph_query(arguments)
             elif tool_name == "ariadne_stats":
@@ -417,7 +551,8 @@ class AriadneMCPServer:
                         "type": "text",
                         "text": json.dumps(result, ensure_ascii=False, indent=2),
                     }
-                ]
+                ],
+                "_cache_hit": cache_hit,
             }
         except Exception as e:
             logger.error(f"Tool execution error: {e}")

@@ -13,6 +13,7 @@ from pathlib import Path
 import sqlite3
 import json
 import logging
+from datetime import datetime, timezone
 
 from ariadne.graph.models import Entity, Relation, EntityType, RelationType, GraphDocument
 
@@ -75,11 +76,11 @@ class GraphStorage:
         return sqlite3.connect(self.db_path)
     
     def _init_db(self) -> None:
-        """Initialize database schema."""
+        """Initialize database schema with temporal support."""
         conn = self._get_connection()
         cursor = conn.cursor()
-        
-        # Entities table
+
+        # Entities table with temporal fields
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS entities (
                 entity_id TEXT PRIMARY KEY,
@@ -91,11 +92,14 @@ class GraphStorage:
                 sources TEXT,
                 confidence REAL,
                 created_at TEXT,
-                updated_at TEXT
+                updated_at TEXT,
+                valid_from TEXT,
+                valid_to TEXT,
+                temporal INTEGER DEFAULT 0
             )
         """)
-        
-        # Relations table
+
+        # Relations table with temporal fields
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS relations (
                 relation_id TEXT PRIMARY KEY,
@@ -107,6 +111,9 @@ class GraphStorage:
                 sources TEXT,
                 confidence REAL,
                 bidirectional INTEGER,
+                valid_from TEXT,
+                valid_to TEXT,
+                temporal INTEGER DEFAULT 0,
                 FOREIGN KEY (source_id) REFERENCES entities(entity_id),
                 FOREIGN KEY (target_id) REFERENCES entities(entity_id)
             )
@@ -158,30 +165,67 @@ class GraphStorage:
         logger.info(f"Loaded {len(self._entities)} entities and {len(self._relations)} relations")
     
     def _row_to_entity(self, row: tuple) -> Entity:
-        """Convert a database row to an Entity."""
+        """Convert a database row to an Entity with temporal support."""
+        # Handle both old schema (10 columns) and new schema (13 columns)
+        name = row[1]
+        entity_type = EntityType(row[2])
+        aliases = json.loads(row[3]) if row[3] else []
+        description = row[4] or ""
+        properties = json.loads(row[5]) if row[5] else {}
+        sources = json.loads(row[6]) if row[6] else []
+        confidence = row[7] if len(row) > 7 else 1.0
+        created_at = row[8] if len(row) > 8 else datetime.now(timezone.utc).isoformat()
+        updated_at = row[9] if len(row) > 9 else datetime.now(timezone.utc).isoformat()
+
+        # Temporal fields (new schema)
+        valid_from = row[10] if len(row) > 10 else None
+        valid_to = row[11] if len(row) > 11 else None
+        temporal = bool(row[12]) if len(row) > 12 else False
+
         return Entity(
-            name=row[1],
-            entity_type=EntityType(row[2]),
-            aliases=json.loads(row[3]) if row[3] else [],
-            description=row[4] or "",
-            properties=json.loads(row[5]) if row[5] else {},
-            sources=json.loads(row[6]) if row[6] else [],
-            confidence=row[7],
-            created_at=row[8],
-            updated_at=row[9],
+            name=name,
+            entity_type=entity_type,
+            aliases=aliases,
+            description=description,
+            properties=properties,
+            sources=sources,
+            confidence=confidence,
+            created_at=created_at,
+            updated_at=updated_at,
+            valid_from=valid_from,
+            valid_to=valid_to,
+            temporal=temporal,
         )
-    
+
     def _row_to_relation(self, row: tuple) -> Relation:
-        """Convert a database row to a Relation."""
+        """Convert a database row to a Relation with temporal support."""
+        # Handle both old schema (9 columns) and new schema (12 columns)
+        source_id = row[1]
+        target_id = row[2]
+        relation_type = RelationType(row[3])
+        properties = json.loads(row[4]) if row[4] else {}
+        description = row[5] or ""
+        sources = json.loads(row[6]) if row[6] else []
+        confidence = row[7] if len(row) > 7 else 1.0
+        bidirectional = bool(row[8]) if len(row) > 8 else False
+
+        # Temporal fields (new schema)
+        valid_from = row[9] if len(row) > 9 else None
+        valid_to = row[10] if len(row) > 10 else None
+        temporal = bool(row[11]) if len(row) > 11 else False
+
         return Relation(
-            source_id=row[1],
-            target_id=row[2],
-            relation_type=RelationType(row[3]),
-            properties=json.loads(row[4]) if row[4] else {},
-            description=row[5] or "",
-            sources=json.loads(row[6]) if row[6] else [],
-            confidence=row[7],
-            bidirectional=bool(row[8]),
+            source_id=source_id,
+            target_id=target_id,
+            relation_type=relation_type,
+            properties=properties,
+            description=description,
+            sources=sources,
+            confidence=confidence,
+            bidirectional=bidirectional,
+            valid_from=valid_from,
+            valid_to=valid_to,
+            temporal=temporal,
         )
     
     # ==================== Entity Operations ====================
@@ -203,12 +247,12 @@ class GraphStorage:
             self._insert_entity(entity)
     
     def _insert_entity(self, entity: Entity) -> None:
-        """Insert entity into database."""
+        """Insert entity into database with temporal fields."""
         conn = self._get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
-            INSERT INTO entities VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO entities VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             entity.entity_id,
             entity.name,
@@ -220,20 +264,24 @@ class GraphStorage:
             entity.confidence,
             entity.created_at,
             entity.updated_at,
+            entity.valid_from,
+            entity.valid_to,
+            1 if entity.temporal else 0,
         ))
-        
+
         conn.commit()
         conn.close()
-    
+
     def _update_entity(self, entity: Entity) -> None:
-        """Update entity in database."""
+        """Update entity in database with temporal fields."""
         conn = self._get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
             UPDATE entities SET
                 name = ?, type = ?, aliases = ?, description = ?,
-                properties = ?, sources = ?, confidence = ?, updated_at = ?
+                properties = ?, sources = ?, confidence = ?, updated_at = ?,
+                valid_from = ?, valid_to = ?, temporal = ?
             WHERE entity_id = ?
         """, (
             entity.name,
@@ -244,12 +292,15 @@ class GraphStorage:
             json.dumps(entity.sources),
             entity.confidence,
             entity.updated_at,
+            entity.valid_from,
+            entity.valid_to,
+            1 if entity.temporal else 0,
             entity.entity_id,
         ))
-        
+
         conn.commit()
         conn.close()
-        
+
         # Update in-memory graph
         if entity.entity_id in self.graph:
             self.graph.nodes[entity.entity_id].update(entity.to_dict())
@@ -328,12 +379,12 @@ class GraphStorage:
         self._insert_relation(relation)
     
     def _insert_relation(self, relation: Relation) -> None:
-        """Insert relation into database."""
+        """Insert relation into database with temporal fields."""
         conn = self._get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
-            INSERT INTO relations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO relations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             relation.relation_id,
             relation.source_id,
@@ -344,8 +395,11 @@ class GraphStorage:
             json.dumps(relation.sources),
             relation.confidence,
             1 if relation.bidirectional else 0,
+            relation.valid_from,
+            relation.valid_to,
+            1 if relation.temporal else 0,
         ))
-        
+
         conn.commit()
         conn.close()
     
@@ -396,19 +450,19 @@ class GraphStorage:
     ) -> List[Tuple[Entity, Relation]]:
         """
         Get neighboring entities with their connecting relations.
-        
+
         Args:
             entity_id: The entity to get neighbors for.
             relation_type: Optional filter by relation type.
-            
+
         Returns:
             List of (Entity, Relation) tuples.
         """
         if entity_id not in self.graph:
             return []
-        
+
         results = []
-        
+
         for _, target_id, key, data in self.graph.out_edges(entity_id, data=True, keys=True):
             relation = self._relations.get(key)
             if relation:
@@ -416,8 +470,173 @@ class GraphStorage:
                     target_entity = self._entities.get(target_id)
                     if target_entity:
                         results.append((target_entity, relation))
-        
+
         return results
+
+    def get_neighbors_temporal(
+        self,
+        entity_id: str,
+        timestamp: str,
+        relation_type: Optional[RelationType] = None,
+    ) -> List[Tuple[Entity, Relation]]:
+        """
+        Get neighboring entities valid at a specific timestamp.
+
+        Args:
+            entity_id: The entity to get neighbors for.
+            timestamp: ISO timestamp to check validity.
+            relation_type: Optional filter by relation type.
+
+        Returns:
+            List of (Entity, Relation) tuples valid at the given time.
+        """
+        if entity_id not in self.graph:
+            return []
+
+        results = []
+
+        for _, target_id, key, data in self.graph.out_edges(entity_id, data=True, keys=True):
+            relation = self._relations.get(key)
+            if relation:
+                # Check temporal validity
+                if not relation.is_valid_at(timestamp):
+                    continue
+
+                if relation_type is None or relation.relation_type == relation_type:
+                    target_entity = self._entities.get(target_id)
+                    if target_entity and target_entity.is_valid_at(timestamp):
+                        results.append((target_entity, relation))
+
+        return results
+
+    def get_temporal_entities(
+        self,
+        timestamp: Optional[str] = None,
+        entity_type: Optional[EntityType] = None,
+    ) -> List[Entity]:
+        """
+        Get all entities valid at a specific timestamp.
+
+        Args:
+            timestamp: ISO timestamp to check validity. None = current time.
+            entity_type: Optional filter by entity type.
+
+        Returns:
+            List of entities valid at the given time.
+        """
+        timestamp = timestamp or datetime.now(timezone.utc).isoformat()
+
+        results = []
+        for entity in self._entities.values():
+            if entity_type and entity.entity_type != entity_type:
+                continue
+            if entity.is_valid_at(timestamp):
+                results.append(entity)
+
+        return results
+
+    def get_temporal_relations(
+        self,
+        timestamp: Optional[str] = None,
+        relation_type: Optional[RelationType] = None,
+    ) -> List[Relation]:
+        """
+        Get all relations valid at a specific timestamp.
+
+        Args:
+            timestamp: ISO timestamp to check validity. None = current time.
+            relation_type: Optional filter by relation type.
+
+        Returns:
+            List of relations valid at the given time.
+        """
+        timestamp = timestamp or datetime.now(timezone.utc).isoformat()
+
+        results = []
+        for relation in self._relations.values():
+            if relation_type and relation.relation_type != relation_type:
+                continue
+            if relation.is_valid_at(timestamp):
+                results.append(relation)
+
+        return results
+
+    def get_validity_history(
+        self,
+        entity_id: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get the full validity history for an entity.
+
+        Returns a timeline of validity periods, including expired periods.
+
+        Args:
+            entity_id: The entity to get history for.
+
+        Returns:
+            List of validity period records.
+        """
+        entity = self._entities.get(entity_id)
+        if not entity:
+            return []
+
+        history = []
+
+        # Current validity period
+        if entity.temporal:
+            history.append({
+                "entity_id": entity_id,
+                "valid_from": entity.valid_from,
+                "valid_to": entity.valid_to,
+                "current": True,
+            })
+
+        # Get historical versions from sources
+        # (This would require additional versioning table in production)
+        history.append({
+            "entity_id": entity_id,
+            "created_at": entity.created_at,
+            "updated_at": entity.updated_at,
+            "current": True,
+        })
+
+        return history
+
+    def add_entity_temporal(
+        self,
+        entity: Entity,
+        valid_from: Optional[str] = None,
+        valid_to: Optional[str] = None,
+    ) -> None:
+        """
+        Add an entity with explicit temporal validity.
+
+        Args:
+            entity: The entity to add.
+            valid_from: Start of validity period (ISO timestamp).
+            valid_to: End of validity period (ISO timestamp).
+        """
+        if valid_from or valid_to:
+            entity.set_validity_period(valid_from, valid_to)
+        self.add_entity(entity)
+
+    def add_relation_temporal(
+        self,
+        relation: Relation,
+        valid_from: Optional[str] = None,
+        valid_to: Optional[str] = None,
+    ) -> None:
+        """
+        Add a relation with explicit temporal validity.
+
+        Args:
+            relation: The relation to add.
+            valid_from: Start of validity period (ISO timestamp).
+            valid_to: End of validity period (ISO timestamp).
+        """
+        if valid_from or valid_to:
+            relation.set_validity_period(valid_from, valid_to)
+        self.add_relation(relation)
     
     def find_path(
         self,

@@ -66,7 +66,7 @@ class RelationType(Enum):
 class Entity:
     """
     A named entity extracted from documents.
-    
+
     Attributes:
         name: The canonical name of the entity.
         entity_type: Type classification (Person, Organization, etc.)
@@ -77,6 +77,9 @@ class Entity:
         confidence: Extraction confidence score (0.0-1.0).
         created_at: When the entity was first created.
         updated_at: When the entity was last updated.
+        valid_from: Start of validity period (ISO timestamp, None = unknown)
+        valid_to: End of validity period (ISO timestamp, None = current)
+        temporal: Whether this entity has temporal constraints
     """
     name: str
     entity_type: EntityType = EntityType.UNKNOWN
@@ -87,6 +90,9 @@ class Entity:
     confidence: float = 1.0
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    valid_from: Optional[str] = None  # Temporal: when this fact becomes valid
+    valid_to: Optional[str] = None    # Temporal: when this fact stops being valid
+    temporal: bool = False            # Whether entity has temporal validity
     
     @property
     def entity_id(self) -> str:
@@ -145,8 +151,11 @@ class Entity:
             "confidence": self.confidence,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "valid_from": self.valid_from,
+            "valid_to": self.valid_to,
+            "temporal": self.temporal,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict) -> "Entity":
         """Create an entity from a dictionary."""
@@ -160,14 +169,57 @@ class Entity:
             confidence=data.get("confidence", 1.0),
             created_at=data.get("created_at", datetime.now(timezone.utc).isoformat()),
             updated_at=data.get("updated_at", datetime.now(timezone.utc).isoformat()),
+            valid_from=data.get("valid_from"),
+            valid_to=data.get("valid_to"),
+            temporal=data.get("temporal", False),
         )
+
+    def is_valid_at(self, timestamp: str) -> bool:
+        """
+        Check if this entity is valid at a given timestamp.
+
+        Args:
+            timestamp: ISO timestamp to check
+
+        Returns:
+            True if entity is valid at the given time
+        """
+        if not self.temporal:
+            return True  # Non-temporal entities are always valid
+
+        from datetime import datetime
+        check_time = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+
+        if self.valid_from:
+            from_time = datetime.fromisoformat(self.valid_from.replace("Z", "+00:00"))
+            if check_time < from_time:
+                return False
+
+        if self.valid_to:
+            to_time = datetime.fromisoformat(self.valid_to.replace("Z", "+00:00"))
+            if check_time > to_time:
+                return False
+
+        return True
+
+    def set_validity_period(
+        self,
+        valid_from: Optional[str] = None,
+        valid_to: Optional[str] = None,
+    ) -> None:
+        """Set the validity period for this entity."""
+        if valid_from or valid_to:
+            self.temporal = True
+            self.valid_from = valid_from
+            self.valid_to = valid_to
+            self.updated_at = datetime.now(timezone.utc).isoformat()
 
 
 @dataclass
 class Relation:
     """
     A relationship between two entities.
-    
+
     Attributes:
         source_id: ID of the source entity.
         target_id: ID of the target entity.
@@ -177,6 +229,9 @@ class Relation:
         sources: Document paths supporting this relation.
         confidence: Extraction confidence score (0.0-1.0).
         bidirectional: Whether the relation works both ways.
+        valid_from: Start of validity period (ISO timestamp)
+        valid_to: End of validity period (ISO timestamp)
+        temporal: Whether this relation has temporal constraints
     """
     source_id: str
     target_id: str
@@ -186,6 +241,9 @@ class Relation:
     sources: List[str] = field(default_factory=list)
     confidence: float = 1.0
     bidirectional: bool = False
+    valid_from: Optional[str] = None  # Temporal: when this relation becomes valid
+    valid_to: Optional[str] = None   # Temporal: when this relation stops being valid
+    temporal: bool = False            # Whether relation has temporal validity
     
     @property
     def relation_id(self) -> str:
@@ -212,8 +270,11 @@ class Relation:
             "sources": self.sources,
             "confidence": self.confidence,
             "bidirectional": self.bidirectional,
+            "valid_from": self.valid_from,
+            "valid_to": self.valid_to,
+            "temporal": self.temporal,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict) -> "Relation":
         """Create a relation from a dictionary."""
@@ -226,7 +287,49 @@ class Relation:
             sources=data.get("sources", []),
             confidence=data.get("confidence", 1.0),
             bidirectional=data.get("bidirectional", False),
+            valid_from=data.get("valid_from"),
+            valid_to=data.get("valid_to"),
+            temporal=data.get("temporal", False),
         )
+
+    def is_valid_at(self, timestamp: str) -> bool:
+        """
+        Check if this relation is valid at a given timestamp.
+
+        Args:
+            timestamp: ISO timestamp to check
+
+        Returns:
+            True if relation is valid at the given time
+        """
+        if not self.temporal:
+            return True
+
+        from datetime import datetime
+        check_time = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+
+        if self.valid_from:
+            from_time = datetime.fromisoformat(self.valid_from.replace("Z", "+00:00"))
+            if check_time < from_time:
+                return False
+
+        if self.valid_to:
+            to_time = datetime.fromisoformat(self.valid_to.replace("Z", "+00:00"))
+            if check_time > to_time:
+                return False
+
+        return True
+
+    def set_validity_period(
+        self,
+        valid_from: Optional[str] = None,
+        valid_to: Optional[str] = None,
+    ) -> None:
+        """Set the validity period for this relation."""
+        if valid_from or valid_to:
+            self.temporal = True
+            self.valid_from = valid_from
+            self.valid_to = valid_to
 
 
 @dataclass

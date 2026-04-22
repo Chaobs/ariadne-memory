@@ -54,6 +54,13 @@
 | ⏱️ **Deferred Deletion** | Mark-batch delete to avoid SQLite lock contention | ✅ |
 | 🔀 **RAG Pipeline** | Hybrid search (vector+BM25) + Reranking + Citations | ✅ |
 | 📌 **Smart Citations** | Auto-generate highlighted document citations | ✅ |
+| 🧠 **4-Layer Memory Stack** | L0 Identity + L1 Narrative + L2 On-Demand + L3 Deep Search | ✅ |
+| 🔐 **WAL Audit Logging** | MCP operation audit trail with metrics | ✅ |
+| ✅ **Schema Validation** | JSON Schema-based MCP parameter validation | ✅ |
+| 🗄️ **Closet Index** | AAAK compressed index for fast drawer lookup | ✅ |
+| ⏰ **Temporal KG** | Knowledge graph with valid_from/valid_to temporal support | ✅ |
+| 💾 **Auto-Save Hooks** | Stop/PreCompact/Session hooks for automatic persistence | ✅ |
+| 🤖 **Claude Code Integration** | Tool tracking, file modification, project context | ✅ |
 
 ---
 
@@ -271,7 +278,15 @@ ariadne/
 │   └── markitdown_ingestor.py  # Universal format via markitdown (22+ formats)
 ├── memory/                 # Vector memory storage
 │   ├── store.py            # ChromaDB implementation + deferred deletion
-│   └── manager.py          # Multi-system manager + export/import
+│   ├── manager.py          # Multi-system manager + export/import
+│   ├── layers.py           # 4-Layer Memory Stack (L0-L3)
+│   └── closet.py           # Closet Index (AAAK format)
+├── plugins/                # Plugin/Hook system
+│   ├── registry.py         # IngestorRegistry (priority-based, decorator API)
+│   ├── hooks.py            # HookManager (4 lifecycle hooks)
+│   ├── autosave.py         # Auto-save hooks + Claude Code integration
+│   ├── loader.py           # Plugin discovery (entry_points + directory scan)
+│   └── __init__.py         # Public API (ingest_hook, on, ...)
 ├── llm/                    # LLM unified interface
 │   ├── base.py             # BaseLLM abstract
 │   ├── factory.py          # LLM factory + ConfigManager
@@ -298,7 +313,10 @@ ariadne/
 │   ├── server.py           # MCP Server core (stdio / HTTP)
 │   ├── tools.py            # MCP Tools (4 tools)
 │   ├── resources.py        # MCP Resources
-│   └── prompts.py          # MCP Prompts
+│   ├── prompts.py          # MCP Prompts
+│   ├── wal.py             # WAL Audit Logger
+│   ├── validation.py      # Schema Validation
+│   └── cache.py           # Cache Invalidation Detection
 ├── web/                    # Web UI (React + FastAPI)
 │   ├── api.py              # FastAPI REST API (20+ endpoints)
 │   ├── __init__.py         # Web entry point

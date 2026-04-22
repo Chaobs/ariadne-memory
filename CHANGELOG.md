@@ -5,6 +5,72 @@ All notable changes to Ariadne will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-04-22
+
+### Added
+
+#### MCP Enhancements (WAL + Schema Validation)
+- **WAL Audit Logger** — Complete operation audit trail for MCP server
+  - SQLite-backed Write-Ahead Log
+  - Operation metrics and statistics
+  - Cache invalidation tracking
+  - Automatic log rotation
+  - Location: `ariadne/mcp/wal.py`
+
+- **Parameter Schema Validation** — JSON Schema-based validation for MCP tools
+  - Required field checking
+  - Type validation (string, number, integer, boolean, array, object)
+  - Enum validation
+  - Range constraints (min/max)
+  - Pattern matching (regex)
+  - Location: `ariadne/mcp/validation.py`
+
+- **Cache Invalidation Detection** — inode/mtime based cache management
+  - File modification time monitoring
+  - Inode tracking
+  - TTL-based expiration
+  - Automatic invalidation on source file changes
+  - Location: `ariadne/mcp/cache.py`
+
+#### 4-Layer Memory Stack
+- **L0 Identity Layer** (~100 tokens) — Core identity and preferences
+- **L1 Narrative Layer** (~500-800 tokens) — Conversation summaries
+- **L2 On-Demand Layer** (~200-500 tokens) — Contextual retrieval
+- **L3 Deep Search Layer** — Full vector search integration
+- Wake-up mechanism for layer activation
+- Automatic context generation for LLM prompts
+- Location: `ariadne/memory/layers.py`
+
+#### Knowledge Graph Temporal Enhancement
+- **valid_from / valid_to fields** — Time-based fact validity
+  - Entity temporal validity
+  - Relation temporal validity
+  - Temporal queries (`get_neighbors_temporal`, `get_temporal_entities`)
+  - Historical fact tracking
+  - Location: `ariadne/graph/models.py`, `ariadne/graph/storage.py`
+
+#### Closet Index (AAAK Format)
+- **Almost All Answer Key** — Compressed index for fast drawer lookup
+- LLM-friendly format: `topic|entities|→drawer_ids`
+- Fast topic/entity to drawer mapping
+- Inverted index for efficient lookups
+- Location: `ariadne/memory/closet.py`
+
+#### Auto-Save Hook System
+- **StopHook** — Automatic save after N messages (default: 15)
+- **PreCompactHook** — Save before context compression
+- **SessionStart/SessionEnd Hooks** — Save on session boundaries
+- **IdleHook** — Save after idle period (default: 5 minutes)
+- **Claude Code Integration** — Tool usage tracking, file modification detection
+- Location: `ariadne/plugins/autosave.py`
+
+### Changed
+
+- **MCP Server** — Integrated WAL, validation, and cache modules
+- **Memory Package** — Added layers.py and closet.py exports
+- **Plugins Package** — Added autosave.py exports
+- **Graph Storage** — Extended schema with temporal fields
+
 ## [0.6.2] - 2026-04-20
 
 ### Added

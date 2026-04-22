@@ -30,6 +30,32 @@ Ariadne supports multiple independent **memory systems**, each like a separate n
 | **Data Storage** | Each system stored at `.ariadne/memories/{name}/` |
 | **Manifest** | `manifest.json` records all memory system metadata |
 
+### 4-Layer Memory Stack
+
+Ariadne implements a hierarchical memory architecture for AI context:
+
+| Layer | Purpose | Token Budget |
+|-------|---------|--------------|
+| **L0 Identity** | Core identity and preferences | ~100 tokens |
+| **L1 Narrative** | Conversation summaries | ~500-800 tokens |
+| **L2 On-Demand** | Current task context | ~200-500 tokens |
+| **L3 Deep Search** | Full vector search | Unlimited |
+
+See [docs/MemoryStack.md](docs/MemoryStack.md) for details.
+
+### MCP Server
+
+Ariadne exposes its capabilities as MCP tools for AI agents:
+
+| Tool | Description |
+|------|-------------|
+| `ariadne_search` | Semantic vector search |
+| `ariadne_ingest` | Document ingestion |
+| `ariadne_graph_query` | Knowledge graph queries |
+| `ariadne_stats` | System statistics |
+
+See [docs/MCP.md](docs/MCP.md) for MCP server configuration.
+
 ### How It Works
 
 ```
