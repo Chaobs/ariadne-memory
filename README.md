@@ -19,6 +19,7 @@
 - [Quick Start](#quick-start)
 - [CLI Usage](#cli-usage)
 - [Architecture](#architecture)
+- [Agent Integration](#agent-integration)
 - [Roadmap](#roadmap)
 - [Credits](#credits)
 - [Third-party Licenses](#third-party-licenses)
@@ -328,22 +329,69 @@ ariadne/
 │           └── pages/      # Home/Search/Memory/Ingest/Graph/Settings
 └── locale/                 # (removed — Web UI has its own i18n)
 
-.ariadne/                   # Project local data (not in Git)
-├── config.json             # User config (API keys, not committed)
-├── .env                    # Environment variables (optional)
-├── memories/               # Memory systems
-│   ├── manifest.json       # System registry
-│   └── {name}/             # Each system's ChromaDB data
-├── knowledge_graph.db      # Knowledge graph SQLite DB
-├── logs/                   # Session logs (auto-rotated, 10 sessions)
-└── chroma/                 # ChromaDB default persistence
+docs/                       # Documentation
+├── AGENT_INTEGRATION.md   # Agent integration guide (Claude Code, Cursor, WorkBuddy)
+├── MCP.md                 # MCP Server documentation
+├── WORKBUDDY-SKILL.md     # WorkBuddy Skill definition file
+├── TEST_AND_EXTENSION_PLAN.md
+├── AutoSave.md
+├── Closet.md
+└── MemoryStack.md
 
-vendor/                     # Third-party packages
+examples/                   # Configuration examples
+└── mcp_config.json        # MCP client configuration template
+
+.ariadne/                  # Project local data (not in Git)
+├── config.json            # User config (API keys, not committed)
+├── .env                   # Environment variables (optional)
+├── memories/              # Memory systems
+│   ├── manifest.json      # System registry
+│   └── {name}/           # Each system's ChromaDB data
+├── knowledge_graph.db     # Knowledge graph SQLite DB
+├── logs/                  # Session logs (auto-rotated, 10 sessions)
+└── chroma/               # ChromaDB default persistence
+
+vendor/                    # Third-party packages
 ├── __init__.py             # Auto-init (HF_HOME / CHROMA_CACHE redirect)
 ├── packages/               # pip whl packages
 ├── models/                 # Local model cache (all-MiniLM-L6-v2)
 └── cache/                  # Runtime cache (Chroma ONNX etc.)
 ```
+
+---
+
+## Agent Integration
+
+Ariadne supports multiple AI Agent integrations:
+
+| Agent | Integration Method | Documentation |
+|-------|-------------------|---------------|
+| Claude Code | MCP Server | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#claude-code) |
+| Cursor | MCP Server | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#cursor) |
+| Windsurf | MCP Server | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#windsurf) |
+| WorkBuddy | Skill + HTTP API | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#workbuddy-skill) |
+| Custom Agents | HTTP REST API | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#http-rest-api) |
+
+### Quick Setup
+
+**MCP Server (Claude Code / Cursor / Windsurf):**
+```json
+{
+  "mcpServers": {
+    "ariadne-memory": {
+      "command": "python",
+      "args": ["-m", "ariadne.mcp.server", "--transport", "stdio"]
+    }
+  }
+}
+```
+
+**WorkBuddy Skill:**
+Copy `docs/WORKBUDDY-SKILL.md` to `~/.workbuddy/skills/ariadne-memory/SKILL.md`
+
+**HTTP API:**
+Start Web UI: `python -m ariadne.cli web run`
+Then access REST API at `http://localhost:8770`
 
 ---
 

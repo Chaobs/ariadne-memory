@@ -19,6 +19,7 @@
 - [快速开始 / Quick Start](#快速开始--quick-start)
 - [CLI 使用指南 / CLI Usage](#cli-使用指南--cli-usage)
 - [架构设计 / Architecture](#架构设计--architecture)
+- [Agent 集成 / Agent Integration](#agent-集成--agent-integration)
 - [开发路线 / Roadmap](#开发路线--roadmap)
 - [项目致谢 / Credits](#项目致谢--credits)
 - [第三方库许可 / Third-party Licenses](#第三方库许可--third-party-licenses)
@@ -309,6 +310,18 @@ ariadne/
 │           └── pages/      # Home/Search/Memory/Ingest/Graph/Settings
 └── locale/                 # (已移除 — Web UI 有自己的 i18n)
 
+docs/                       # 文档目录
+├── AGENT_INTEGRATION.md   # Agent 集成指南（Claude Code, Cursor, WorkBuddy）
+├── MCP.md                 # MCP Server 文档
+├── WORKBUDDY-SKILL.md    # WorkBuddy Skill 定义文件
+├── TEST_AND_EXTENSION_PLAN.md
+├── AutoSave.md
+├── Closet.md
+└── MemoryStack.md
+
+examples/                   # 配置示例
+└── mcp_config.json        # MCP 客户端配置模板
+
 .ariadne/                   # 项目本地数据目录（不在 Git 中）
 ├── config.json             # 用户配置（API Key 等，不推送）
 ├── .env                    # 环境变量（可选）
@@ -325,6 +338,41 @@ vendor/                     # 第三方库本地化
 ├── models/                 # 本地模型缓存（all-MiniLM-L6-v2）
 └── cache/                  # 运行时缓存（Chroma ONNX 等）
 ```
+
+---
+
+## Agent 集成 / Agent Integration
+
+Ariadne 支持多种 AI Agent 集成：
+
+| Agent | 集成方式 | 文档 |
+|-------|--------|------|
+| Claude Code | MCP Server | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#claude-code) |
+| Cursor | MCP Server | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#cursor) |
+| Windsurf | MCP Server | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#windsurf) |
+| WorkBuddy | Skill + HTTP API | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#workbuddy-skill) |
+| 自定义 Agent | HTTP REST API | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#http-rest-api) |
+
+### 快速配置
+
+**MCP Server（Claude Code / Cursor / Windsurf）：**
+```json
+{
+  "mcpServers": {
+    "ariadne-memory": {
+      "command": "python",
+      "args": ["-m", "ariadne.mcp.server", "--transport", "stdio"]
+    }
+  }
+}
+```
+
+**WorkBuddy Skill：**
+将 `docs/WORKBUDDY-SKILL.md` 复制到 `~/.workbuddy/skills/ariadne-memory/SKILL.md`
+
+**HTTP API：**
+启动 Web UI：`python -m ariadne.cli web run`
+然后访问 REST API：`http://localhost:8770`
 
 ---
 

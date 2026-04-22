@@ -200,6 +200,10 @@ def create_app() -> FastAPI:
     app.include_router(config_router, prefix="/api/config", tags=["Config"])
     app.include_router(system_router, prefix="/api/system", tags=["System"])
 
+    # Register extension routers (CLI feature parity)
+    from ariadne.web.api_extensions import register_extension_routers
+    register_extension_routers(app)
+
     @app.get("/api/health")
     async def health_check():
         return {"status": "ok", "version": __version__}

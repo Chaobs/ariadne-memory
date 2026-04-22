@@ -1,10 +1,12 @@
 {
   "mcpServers": {
-    "ariadne": {
+    "ariadne-memory": {
       "command": "python",
       "args": [
         "-m",
-        "ariadne.tools.mcp_server"
+        "ariadne.mcp.server",
+        "--transport",
+        "stdio"
       ],
       "env": {
         "PYTHONPATH": "path/to/Ariadne"
