@@ -13,10 +13,12 @@ export default function Memory() {
   const [newDesc, setNewDesc] = useState('');
   const [mergeFrom, setMergeFrom] = useState<string[]>([]);
   const [mergeTo, setMergeTo] = useState('');
+  const [deleteSources, setDeleteSources] = useState(false);
   const [tab, setTab] = useState<'list' | 'create' | 'merge' | 'import'>('list');
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameNewName, setRenameNewName] = useState('');
   const [importing, setImporting] = useState(false);
+  const [detailTarget, setDetailTarget] = useState<MemoryInfo | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function load() {
@@ -41,6 +43,21 @@ export default function Memory() {
     try {
       await memoryApi.delete(name);
       load();
+    } catch (err) { alert(String(err)); }
+  }
+
+  async function handleClear(name: string) {
+    if (!confirm(t('memory.confirm_clear') || `Clear all documents from '${name}'?`)) return;
+    try {
+      await memoryApi.clear(name);
+      load();
+    } catch (err) { alert(String(err)); }
+  }
+
+  async function handleShowDetail(name: string) {
+    try {
+      const info = await memoryApi.getInfo(name);
+      setDetailTarget(info);
     } catch (err) { alert(String(err)); }
   }
 
@@ -100,8 +117,8 @@ export default function Memory() {
     e.preventDefault();
     if (!mergeTo.trim() || mergeFrom.length === 0) return;
     try {
-      await memoryApi.merge(mergeFrom, mergeTo);
-      setMergeFrom([]); setMergeTo('');
+      await memoryApi.merge(mergeFrom, mergeTo, deleteSources);
+      setMergeFrom([]); setMergeTo(''); setDeleteSources(false);
       setTab('list');
       load();
     } catch (err) { alert(String(err)); }
@@ -158,6 +175,13 @@ export default function Memory() {
                     <td className="action-buttons">
                       <button
                         className="btn-icon"
+                        title={t('memory.info') || 'Details'}
+                        onClick={() => handleShowDetail(s.name)}
+                      >
+                        ℹ️
+                      </button>
+                      <button
+                        className="btn-icon"
                         title={t('memory.rename')}
                         onClick={() => { setRenameTarget(s.name); setRenameNewName(s.name); }}
                       >
@@ -169,6 +193,13 @@ export default function Memory() {
                         onClick={() => handleExport(s.name)}
                       >
                         📤
+                      </button>
+                      <button
+                        className="btn-icon"
+                        title={t('memory.clear') || 'Clear'}
+                        onClick={() => handleClear(s.name)}
+                      >
+                        🧹
                       </button>
                       <button
                         className="btn-icon btn-danger"
@@ -235,6 +266,14 @@ export default function Memory() {
               required
             />
           </div>
+          <label className="checkbox-label" style={{ marginBottom: '12px' }}>
+            <input
+              type="checkbox"
+              checked={deleteSources}
+              onChange={e => setDeleteSources(e.target.checked)}
+            />
+            {t('memory.delete_sources') || 'Delete sources after merge'}
+          </label>
           <button type="submit" className="btn-primary" disabled={mergeFrom.length === 0}>
             {t('memory.merge')} ({mergeFrom.length} → {mergeTo || '?'})
           </button>
@@ -275,6 +314,27 @@ export default function Memory() {
               </button>
               <button className="btn-primary" onClick={handleRename}>
                 {t('common.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {detailTarget && (
+        <div className="modal-overlay" onClick={() => setDetailTarget(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>ℹ️ {detailTarget.name}</h3>
+            <div style={{ textAlign: 'left', lineHeight: 1.8 }}>
+              <p><strong>{t('memory.documents') || 'Documents'}:</strong> {detailTarget.document_count}</p>
+              <p><strong>Path:</strong> <small>{detailTarget.path}</small></p>
+              <p><strong>{t('memory.created') || 'Created'}:</strong> {detailTarget.created_at || '—'}</p>
+              <p><strong>Updated:</strong> {detailTarget.updated_at || '—'}</p>
+              {detailTarget.description && <p><strong>Description:</strong> {detailTarget.description}</p>}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setDetailTarget(null)}>
+                {t('common.cancel') || 'Close'}
               </button>
             </div>
           </div>

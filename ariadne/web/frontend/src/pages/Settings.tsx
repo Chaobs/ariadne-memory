@@ -27,6 +27,7 @@ export default function Settings() {
   const [providers, setProviders] = useState<any[]>([]);
   const [currentLocale, setCurrentLocale] = useState<Locale>('en');
   const [saving, setSaving] = useState(false);
+  const [fullConfig, setFullConfig] = useState<Record<string, any> | null>(null);
 
   useEffect(() => {
     // Get initial locale from localStorage
@@ -42,6 +43,7 @@ export default function Settings() {
       setModel(llm.model || '');
       setApiKey(llm.api_key || '');
       setBaseUrl(llm.base_url || '');
+      setFullConfig(c.config || {});
     }).catch(console.error);
   }, []);
 
@@ -155,6 +157,40 @@ export default function Settings() {
           ))}
         </div>
       </div>
+
+      {/* Full Configuration View */}
+      {fullConfig && (
+        <div className="form-card">
+          <h2>📋 {t('settings.full_config') || 'Full Configuration'}</h2>
+          <p style={{ color: 'var(--text-dim)', marginBottom: '12px', fontSize: '0.85rem' }}>
+            Read-only view of all configuration values
+          </p>
+          <details open>
+            <summary style={{ cursor: 'pointer', fontWeight: 'bold', marginBottom: '8px' }}>LLM</summary>
+            <pre style={{ fontSize: '0.8rem', background: 'var(--bg-secondary)', padding: '8px', borderRadius: '4px', overflow: 'auto' }}>
+              {JSON.stringify(fullConfig.llm || {}, null, 2)}
+            </pre>
+          </details>
+          <details style={{ marginTop: '8px' }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 'bold', marginBottom: '8px' }}>Locale</summary>
+            <pre style={{ fontSize: '0.8rem', background: 'var(--bg-secondary)', padding: '8px', borderRadius: '4px', overflow: 'auto' }}>
+              {JSON.stringify(fullConfig.locale || {}, null, 2)}
+            </pre>
+          </details>
+          <details style={{ marginTop: '8px' }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 'bold', marginBottom: '8px' }}>Advanced</summary>
+            <pre style={{ fontSize: '0.8rem', background: 'var(--bg-secondary)', padding: '8px', borderRadius: '4px', overflow: 'auto' }}>
+              {JSON.stringify(fullConfig.advanced || {}, null, 2)}
+            </pre>
+          </details>
+          <details style={{ marginTop: '8px' }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 'bold', marginBottom: '8px' }}>Plugins</summary>
+            <pre style={{ fontSize: '0.8rem', background: 'var(--bg-secondary)', padding: '8px', borderRadius: '4px', overflow: 'auto' }}>
+              {JSON.stringify(fullConfig.plugins || {}, null, 2)}
+            </pre>
+          </details>
+        </div>
+      )}
     </div>
   );
 }

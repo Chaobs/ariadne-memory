@@ -661,16 +661,17 @@ Type 'yes' to confirm deletion: """
         Windows.  Calling ``close()`` while those pages are still buffered
         can leave the ``chroma.sqlite3`` file in a corrupted state
         (SQLITE_NOTADB / code: 26).  Instead we simply drop our Python
-        references and let GC reclaim the handle naturally — SQLite will
-        flush cleanly when the process exits or the next client opens it.
+        references, clear the SharedSystemClient cache, and let GC reclaim
+        the handle naturally.
         """
         import gc
         if name in self._stores:
             try:
                 store = self._stores.pop(name)
+                persist_dir = getattr(store, "persist_dir", None)
+
                 # Soft release: drop all internal references so Python's GC
                 # can eventually collect the underlying ChromaDB/SQLite objects.
-                # We intentionally do NOT call client.close() — see docstring.
                 for attr in ("_client", "_collection"):
                     if hasattr(store, attr):
                         try:
@@ -678,6 +679,16 @@ Type 'yes' to confirm deletion: """
                         except AttributeError:
                             pass
                 del store  # dereference
+
+                # Clear ChromaDB's SharedSystemClient cache for this path.
+                # This is crucial on Windows — without it, chroma.sqlite3
+                # remains locked and shutil.rmtree() fails.
+                try:
+                    import chromadb.api.shared_system_client
+                    chromadb.api.shared_system_client.SharedSystemClient.clear_system_cache()
+                except Exception:
+                    pass
+
                 gc.collect()
             except Exception as e:
                 print(f"Warning: Error closing store for '{name}': {e}")

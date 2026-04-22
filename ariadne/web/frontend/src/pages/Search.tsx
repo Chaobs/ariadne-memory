@@ -20,6 +20,9 @@ export default function Search() {
   const [systems, setSystems] = useState<{ name: string }[]>([]);
   const [memory, setMemory] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [ragAlpha, setRagAlpha] = useState(0.5);
+  const [ragFetchK, setRagFetchK] = useState(20);
+  const [ragNoRerank, setRagNoRerank] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState(-1);
   const [ragHealth, setRagHealth] = useState<any>(null);
@@ -123,7 +126,7 @@ export default function Search() {
     setSelectedSuggestion(-1);
     try {
       if (mode === 'rag') {
-        const res = await searchApi.rag(query, topK, 20, 0.5, memory || undefined);
+        const res = await searchApi.rag(query, topK, ragFetchK, ragAlpha, memory || undefined, ragNoRerank);
         setResults(res.results);
       } else {
         const res = await searchApi.semantic(query, topK, memory || undefined);
@@ -240,6 +243,41 @@ export default function Search() {
               ))}
             </select>
           </label>
+          {mode === 'rag' && (
+            <>
+              <label title="Vector weight (1.0=vector only, 0.0=BM25 only)">
+                α:
+                <input
+                  type="number"
+                  value={ragAlpha}
+                  onChange={e => setRagAlpha(Number(e.target.value))}
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  style={{ width: '60px' }}
+                />
+              </label>
+              <label title="Candidates before reranking">
+                Fetch:
+                <input
+                  type="number"
+                  value={ragFetchK}
+                  onChange={e => setRagFetchK(Number(e.target.value))}
+                  min={5}
+                  max={100}
+                  style={{ width: '60px' }}
+                />
+              </label>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={ragNoRerank}
+                  onChange={e => setRagNoRerank(e.target.checked)}
+                />
+                No rerank
+              </label>
+            </>
+          )}
           <button type="submit" disabled={loading} className="btn-primary">
             {loading ? t('search.loading') : '🔍'}
           </button>

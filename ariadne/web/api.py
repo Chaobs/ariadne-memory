@@ -1059,6 +1059,60 @@ async def enrich_graph(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@graph_router.get("/entity/{name}")
+async def graph_entity_query(
+    name: str,
+    depth: int = Query(1, description="Traversal depth for related entities"),
+):
+    """Query a specific entity and its relationships in the knowledge graph."""
+    try:
+        from ariadne.graph import GraphStorage
+
+        graph = GraphStorage(db_path=str(GRAPH_DB_PATH))
+        entity = graph.get_entity_by_name(name)
+        if not entity:
+            raise HTTPException(status_code=404, detail=f"Entity '{name}' not found")
+
+        # Get entity details
+        result = {
+            "entity": {
+                "id": entity.entity_id,
+                "name": entity.name,
+                "type": entity.entity_type.value,
+                "description": entity.description,
+                "aliases": entity.aliases,
+            },
+            "relations": [],
+        }
+
+        # Get related entities
+        relations = graph.get_relations(entity.entity_id, max_depth=depth)
+        for rel in relations:
+            target = graph.get_entity(rel.target_id)
+            source = graph.get_entity(rel.source_id)
+            result["relations"].append({
+                "relation_id": rel.relation_id,
+                "type": rel.relation_type.value,
+                "description": rel.description,
+                "source": {
+                    "id": source.entity_id if source else rel.source_id,
+                    "name": source.name if source else rel.source_id,
+                    "type": source.entity_type.value if source else "unknown",
+                } if source else {"id": rel.source_id, "name": rel.source_id, "type": "unknown"},
+                "target": {
+                    "id": target.entity_id if target else rel.target_id,
+                    "name": target.name if target else rel.target_id,
+                    "type": target.entity_type.value if target else "unknown",
+                } if target else {"id": rel.target_id, "name": rel.target_id, "type": "unknown"},
+            })
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @graph_router.get("/html")
 async def graph_html(
     max_nodes: int = Query(50),
@@ -1105,6 +1159,7 @@ async def graph_export(
             "svg": ".svg",
             "json": ".json",
             "mermaid": ".mm",
+            "dot": ".dot",
         }
 
         if format not in ext_map:
@@ -1162,6 +1217,14 @@ async def graph_export(
             with open(tmp_path, "w", encoding="utf-8") as f:
                 f.write(content)
             media_type = "text/plain"
+            filename = f"graph{ext}"
+
+        elif format == "dot":
+            visualizer = GraphVisualizer(graph, cfg)
+            content = visualizer.to_dot(max_nodes=max_nodes)
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            media_type = "text/vnd.graphviz"
             filename = f"graph{ext}"
 
         return FileResponse(

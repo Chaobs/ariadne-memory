@@ -240,10 +240,10 @@ export const searchApi = {
       body: JSON.stringify({ query, top_k: topK, memory }),
     }),
 
-  rag: (query: string, topK = 5, fetchK = 20, alpha = 0.5, memory?: string) =>
+  rag: (query: string, topK = 5, fetchK = 20, alpha = 0.5, memory?: string, noRerank = false) =>
     fetchJSON<RAGResult>(`${API_BASE}/search/rag`, {
       method: 'POST',
-      body: JSON.stringify({ query, top_k: topK, fetch_k: fetchK, alpha, memory }),
+      body: JSON.stringify({ query, top_k: topK, fetch_k: fetchK, alpha, memory, no_rerank: noRerank }),
     }),
 
   suggest: (q: string, memory?: string) =>
@@ -286,7 +286,18 @@ export const graphApi = {
       body: JSON.stringify({ memory, limit, force: false }),
     }),
 
-  /** Download graph export as a file (HTML, Markdown, DOCX, SVG, JSON, Mermaid) */
+  /** Query a specific entity and its relationships */
+  getEntity: (name: string, depth = 1) =>
+    fetchJSON<{
+      entity: { id: string; name: string; type: string; description?: string; aliases?: string[] };
+      relations: Array<{
+        relation_id: string; type: string; description?: string;
+        source: { id: string; name: string; type: string };
+        target: { id: string; name: string; type: string };
+      }>;
+    }>(`${API_BASE}/graph/entity/${encodeURIComponent(name)}?depth=${depth}`),
+
+  /** Download graph export as a file (HTML, Markdown, DOCX, SVG, JSON, Mermaid, DOT) */
   downloadExport: (format: string, maxNodes = 50, title = 'Knowledge Graph Export') => {
     const url = `${API_BASE}/graph/export/${format}?max_nodes=${maxNodes}&title=${encodeURIComponent(title)}`;
     const a = document.createElement('a');

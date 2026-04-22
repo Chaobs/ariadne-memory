@@ -325,7 +325,7 @@ vendor/                     # Third-party packages
 
 ## Roadmap
 
-> **Current Phase**: Phase 2 — Web UI ✅ Completed | Phase 3 — Plugin System 🔄
+> **Current Phase**: Phase 2 — Web UI ✅ | Phase 3 — Plugin System ✅ | Phase 6 — Community & Iteration 🔄
 
 ### Phase 0 MVP ✅ **Completed**
 - [x] Project skeleton and directory structure
@@ -376,13 +376,13 @@ vendor/                     # Third-party packages
 - [x] Interactive graph visualization (HTML/DOT/Mermaid)
 - [ ] 🔨 **Knowledge system analysis** — Cross-memory system comparison, coverage analysis
 
-### Phase 4 Media & Academic Tools 🔄 **Partially Complete**
-- [x] Entity recognition + relation extraction (LLM API)
-- [x] NetworkX + SQLite graph database
-- [x] Cross-source relationship queries
-- [x] Knowledge timeline view
-- [x] Interactive graph visualization (HTML/DOT/Mermaid)
-- [ ] 🔨 **Knowledge system analysis** — Cross-memory system comparison, coverage analysis
+### Phase 3.5 Plugin/Hook System ✅ **Completed**
+- [x] `ariadne/plugins/` — IngestorRegistry + HookManager + PluginLoader
+- [x] Dynamic ingestor registration (priority-based, decorator API)
+- [x] 4 lifecycle hooks (before_ingest / after_ingest / before_search / after_search)
+- [x] Plugin discovery via Python entry_points + directory scanning
+- [x] Unified SCAN_EXTENSIONS from IngestorRegistry (61 built-in extensions)
+- [x] Config support: `plugins` section in config.json
 
 ### Phase 4 Media & Academic Tools 🔄 **Partially Complete**
 - [x] EPUB ebook ingestion
@@ -420,6 +420,8 @@ vendor/                     # Third-party packages
 - [x] **Web UI (FastAPI + React)** — Modern cross-platform interface, replacing legacy Tkinter
 - [x] **Real-time ingestion progress** — SSE for live upload progress
 - [x] **Beautiful graph visualization** — D3.js interactive knowledge graph
+- [x] **Web UI feature parity** — Memory clear/details, RAG params, entity query, DOT export, full config view
+- [x] **Session logging** — `.ariadne/logs/` with auto-rotation
 - [ ] 🔨 **Wiki pages and detailed documentation**
 - [ ] 🔨 **Logo and icon design**
 - [ ] 🔨 **Cloud backup & network query** (memory system cloud sync + real-time info retrieval)

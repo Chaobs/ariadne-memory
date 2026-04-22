@@ -25,6 +25,9 @@ export default function Graph() {
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedNode, setHighlightedNode] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [entityQuery, setEntityQuery] = useState('');
+  const [entityResult, setEntityResult] = useState<any>(null);
+  const [entityLoading, setEntityLoading] = useState(false);
 
   useEffect(() => {
     graphApi.status().then(setStatus).catch(console.error);
@@ -52,6 +55,21 @@ export default function Graph() {
 
   function handleNodeHighlight(nodeId: string | null) {
     setHighlightedNode(nodeId);
+  }
+
+  async function handleEntityQuery(e: React.FormEvent) {
+    e.preventDefault();
+    if (!entityQuery.trim()) return;
+    setEntityLoading(true);
+    setEntityResult(null);
+    try {
+      const result = await graphApi.getEntity(entityQuery, 2);
+      setEntityResult(result);
+    } catch (err: any) {
+      setEntityResult({ error: err.message || 'Entity not found' });
+    } finally {
+      setEntityLoading(false);
+    }
   }
 
   return (
@@ -156,6 +174,7 @@ export default function Graph() {
               <button onClick={() => handleExport('svg')}>🖼️ SVG</button>
               <button onClick={() => handleExport('json')}>📋 JSON</button>
               <button onClick={() => handleExport('mermaid')}>📊 Mermaid</button>
+              <button onClick={() => handleExport('dot')}>🔗 DOT (GraphViz)</button>
               <hr style={{ margin: '4px 0', borderColor: 'var(--border)' }} />
               <button onClick={() => {
                 setShowExportMenu(false);
@@ -173,6 +192,57 @@ export default function Graph() {
         onNodeHighlight={handleNodeHighlight}
         highlightedNodeId={highlightedNode}
       />
+
+      {/* Entity Query */}
+      <div className="form-card" style={{ marginTop: '20px' }}>
+        <h2>🔍 {t('graph.entity_query') || 'Entity Query'}</h2>
+        <p style={{ color: 'var(--text-dim)', marginBottom: '12px', fontSize: '0.9rem' }}>
+          {t('graph.entity_query_hint') || 'Search for a specific entity and view its relationships'}
+        </p>
+        <form onSubmit={handleEntityQuery} style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+          <input
+            type="text"
+            placeholder={t('graph.entity_placeholder') || 'Entity name...'}
+            value={entityQuery}
+            onChange={e => setEntityQuery(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <button type="submit" className="btn-primary" disabled={entityLoading}>
+            {entityLoading ? '⏳' : '🔍'}
+          </button>
+        </form>
+        {entityResult && !entityResult.error && (
+          <div className="result-panel">
+            <h3>👤 {entityResult.entity.name} <small style={{ color: 'var(--text-dim)' }}>({entityResult.entity.type})</small></h3>
+            {entityResult.entity.description && <p>{entityResult.entity.description}</p>}
+            {entityResult.entity.aliases && entityResult.entity.aliases.length > 0 && (
+              <p><small>Aliases: {entityResult.entity.aliases.join(', ')}</small></p>
+            )}
+            {entityResult.relations.length > 0 ? (
+              <table className="systems-table" style={{ marginTop: '8px' }}>
+                <thead><tr><th>Relation</th><th>Connected Entity</th><th>Type</th></tr></thead>
+                <tbody>
+                  {entityResult.relations.map((r: any, i: number) => {
+                    const other = r.source.id === entityResult.entity.id ? r.target : r.source;
+                    return (
+                      <tr key={i}>
+                        <td>{r.type}</td>
+                        <td><strong>{other.name}</strong></td>
+                        <td><small>{other.type}</small></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <p style={{ color: 'var(--text-dim)' }}>No relations found.</p>
+            )}
+          </div>
+        )}
+        {entityResult && entityResult.error && (
+          <div className="alert alert-warning">⚠️ {entityResult.error}</div>
+        )}
+      </div>
     </div>
   );
 }
