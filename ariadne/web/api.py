@@ -1085,26 +1085,36 @@ async def graph_entity_query(
             "relations": [],
         }
 
-        # Get related entities
-        relations = graph.get_relations(entity.entity_id, max_depth=depth)
-        for rel in relations:
-            target = graph.get_entity(rel.target_id)
-            source = graph.get_entity(rel.source_id)
-            result["relations"].append({
-                "relation_id": rel.relation_id,
-                "type": rel.relation_type.value,
-                "description": rel.description,
-                "source": {
-                    "id": source.entity_id if source else rel.source_id,
-                    "name": source.name if source else rel.source_id,
-                    "type": source.entity_type.value if source else "unknown",
-                } if source else {"id": rel.source_id, "name": rel.source_id, "type": "unknown"},
-                "target": {
-                    "id": target.entity_id if target else rel.target_id,
-                    "name": target.name if target else rel.target_id,
-                    "type": target.entity_type.value if target else "unknown",
-                } if target else {"id": rel.target_id, "name": rel.target_id, "type": "unknown"},
-            })
+        # Get related entities via BFS up to 'depth' hops
+        visited = {entity.entity_id}
+        current_level = [entity.entity_id]
+
+        for _ in range(depth):
+            next_level = []
+            for eid in current_level:
+                for neighbor, relation in graph.get_neighbors(eid):
+                    if neighbor.entity_id not in visited:
+                        visited.add(neighbor.entity_id)
+                        next_level.append(neighbor.entity_id)
+                        # Determine the "other" entity for this relation
+                        source = graph.get_entity(relation.source_id)
+                        target = graph.get_entity(relation.target_id)
+                        result["relations"].append({
+                            "relation_id": relation.relation_id,
+                            "type": relation.relation_type.value,
+                            "description": relation.description,
+                            "source": {
+                                "id": source.entity_id if source else relation.source_id,
+                                "name": source.name if source else relation.source_id,
+                                "type": source.entity_type.value if source else "unknown",
+                            } if source else {"id": relation.source_id, "name": relation.source_id, "type": "unknown"},
+                            "target": {
+                                "id": target.entity_id if target else relation.target_id,
+                                "name": target.name if target else relation.target_id,
+                                "type": target.entity_type.value if target else "unknown",
+                            } if target else {"id": relation.target_id, "name": relation.target_id, "type": "unknown"},
+                        })
+            current_level = next_level
 
         return result
     except HTTPException:

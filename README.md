@@ -139,7 +139,6 @@ pip install -r requirements.txt
 **Windows Shortcuts:**
 ```bash
 # Double-click ariadne-cli.bat  — Command line interface
-# Double-click ariadne-gui.bat   — Legacy Tkinter GUI (deprecated)
 # Double-click ariadne-web.bat   — Modern Web UI (recommended)
 ```
 
@@ -178,10 +177,7 @@ python -m ariadne.cli ingest ./papers/ -r -m "Research Notes"
 python -m ariadne.cli search "AI ethics" -m "Research Notes"
 
 # Merge memory systems
-python -m ariadne.cli memory merge old_notes temp "Consolidated"
-
-# Launch GUI
-python -m ariadne.cli gui
+python -m ariadne.cli memory merge old_notes temp --into "Consolidated"
 ```
 
 ### Python API
@@ -220,12 +216,11 @@ for doc, score in results:
 | `ingest` | Ingest files or directories | `ariadne ingest ./notes.md` |
 | `search` | Semantic search | `ariadne search "AI ethics"` |
 | `info` | View system info | `ariadne info --stats` |
-| `gui` | Launch GUI | `ariadne gui` |
 | `memory list` | List all memory systems | `ariadne memory list` |
 | `memory create` | Create new system | `ariadne memory create "Research"` |
 | `memory rename` | Rename system | `ariadne memory rename old new` |
 | `memory delete` | Delete system | `ariadne memory delete old` |
-| `memory merge` | Merge systems | `ariadne memory merge a b new` |
+| `memory merge` | Merge systems | `ariadne memory merge a b --into new` |
 | `memory export` | Export system | `ariadne memory export research ./backup/` |
 | `memory import` | Import system | `ariadne memory import ./backup/ imported` |
 | `config show` | Show config | `ariadne config show` |
@@ -234,6 +229,9 @@ for doc, score in results:
 | `config set-api-key` | Set API key | `ariadne config set-api-key deepseek sk-xxxxx` |
 | `advanced summarize` | Generate summary | `ariadne advanced summarize "AI"` |
 | `advanced graph` | Knowledge graph | `ariadne advanced graph -f dot` |
+| `rag search` | RAG hybrid search | `ariadne rag search "query" -m default` |
+| `rag rebuild-index` | Rebuild BM25 index | `ariadne rag rebuild-index` |
+| `rag health` | RAG health check | `ariadne rag health` |
 | `web run` | Launch web UI | `ariadne web run --port 8770` |
 | `web info` | Web UI status | `ariadne web info` |
 
@@ -244,12 +242,13 @@ for doc, score in results:
 ```
 ariadne/
 ├── __init__.py              # Public API entry (auto-init vendor)
-├── cli.py                   # Command line tool
-├── gui.py                  # Tkinter GUI
+├── cli.py                   # CLI tool (Typer + Rich)
 ├── config.py               # Unified config system
 ├── paths.py                # Path management
 ├── advanced.py             # Advanced features (summary/visualization/export)
 ├── i18n.py                 # Multi-language support (8 languages)
+├── logging.py              # Session logging with auto-rotation
+├── models.py               # Shared data models
 ├── ingest/                 # Ingestion modules
 │   ├── base.py             # BaseIngestor + Document model
 │   ├── markdown.py         # Markdown ingestor
@@ -268,41 +267,47 @@ ariadne/
 │   ├── academic.py         # BibTeX/RIS ingestor
 │   ├── web.py              # Web page ingestor
 │   ├── email.py            # Email ingestor
-│   └── media.py            # Video/audio ingestor
+│   ├── media.py            # Video/audio ingestor
+│   └── markitdown_ingestor.py  # Universal format via markitdown (22+ formats)
 ├── memory/                 # Vector memory storage
-│   ├── store.py            # ChromaDB implementation
+│   ├── store.py            # ChromaDB implementation + deferred deletion
 │   └── manager.py          # Multi-system manager + export/import
 ├── llm/                    # LLM unified interface
 │   ├── base.py             # BaseLLM abstract
 │   ├── factory.py          # LLM factory + ConfigManager
-│   ├── providers.py       # Provider implementations (9 providers)
+│   ├── providers.py        # Provider implementations (9 providers)
 │   ├── reranker.py         # Semantic reranking
 │   └── chunker.py          # Smart chunking
 ├── graph/                  # Knowledge graph
 │   ├── models.py           # Entity/Relation models
 │   ├── extractor.py        # Entity/relation extraction
 │   ├── storage.py          # NetworkX + SQLite storage
-│   └── query.py           # Graph query interface
+│   └── query.py            # Graph query interface
+├── plugins/                # Plugin/Hook system
+│   ├── registry.py         # IngestorRegistry (priority-based, decorator API)
+│   ├── hooks.py            # HookManager (4 lifecycle hooks)
+│   ├── loader.py           # Plugin discovery (entry_points + directory scan)
+│   └── __init__.py         # Public API (ingest_hook, on, ...)
+├── rag/                    # RAG Pipeline
+│   ├── bm25_retriever.py   # BM25 retriever
+│   ├── hybrid_search.py    # Hybrid search (vector + BM25, RRF fusion)
+│   ├── reranker.py         # Cross-encoder reranker
+│   ├── citation.py         # Citation generator
+│   └── engine.py           # RAG engine
 ├── mcp/                    # MCP Server
-│   ├── server.py           # MCP Server core
-│   ├── tools.py            # MCP Tools
+│   ├── server.py           # MCP Server core (stdio / HTTP)
+│   ├── tools.py            # MCP Tools (4 tools)
 │   ├── resources.py        # MCP Resources
 │   └── prompts.py          # MCP Prompts
-├── rag/                    # RAG Pipeline
-│   ├── bm25.py             # BM25 retriever
-│   ├── hybrid.py           # Hybrid search
-│   ├── reranker.py         # Cross-encoder reranker
-│   └── engine.py           # RAG engine
 ├── web/                    # Web UI (React + FastAPI)
-│   ├── api.py              # FastAPI REST API
-│   ├── __init__.py        # Web entry point
+│   ├── api.py              # FastAPI REST API (20+ endpoints)
+│   ├── __init__.py         # Web entry point
+│   ├── static/             # Deployed production build
 │   └── frontend/           # React + Vite + TypeScript source
-│       ├── src/
-│       │   ├── api/       # API client
-│       │   ├── components/ # Layout component
-│       │   └── pages/      # Home/Search/Memory/Ingest/Graph/Settings
-│       ├── dist/           # Production build output
-│       └── static/         # Deployed static files
+│       └── src/
+│           ├── api/        # API client (ariadne.ts)
+│           ├── components/ # Layout, theme, i18n
+│           └── pages/      # Home/Search/Memory/Ingest/Graph/Settings
 └── locale/                 # i18n translation files (8 languages)
 
 .ariadne/                   # Project local data (not in Git)
@@ -310,15 +315,16 @@ ariadne/
 ├── .env                    # Environment variables (optional)
 ├── memories/               # Memory systems
 │   ├── manifest.json       # System registry
-│   └── {name}/           # Each system's ChromaDB data
+│   └── {name}/             # Each system's ChromaDB data
 ├── knowledge_graph.db      # Knowledge graph SQLite DB
-└── chroma/                # ChromaDB default persistence
+├── logs/                   # Session logs (auto-rotated, 10 sessions)
+└── chroma/                 # ChromaDB default persistence
 
 vendor/                     # Third-party packages
-├── __init__.py            # Auto-init (HF_HOME / CHROMA_CACHE redirect)
-├── packages/              # pip whl packages
-├── models/               # Local model cache (all-MiniLM-L6-v2)
-└── cache/                # Runtime cache (Chroma ONNX etc.)
+├── __init__.py             # Auto-init (HF_HOME / CHROMA_CACHE redirect)
+├── packages/               # pip whl packages
+├── models/                 # Local model cache (all-MiniLM-L6-v2)
+└── cache/                  # Runtime cache (Chroma ONNX etc.)
 ```
 
 ---

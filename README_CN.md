@@ -39,7 +39,7 @@
 | 💾 **记忆导出/导入** | 支持将记忆系统导出为目录或从目录导入（备份与分享） | ✅ |
 | 📚 **媒体支持** | EPUB/MOBI 电子书、图片 OCR、扫描 PDF、学术文献元数据 | ✅ |
 | 🔌 **MCP Server** | 提供 MCP 工具接口，可接入 Claude Code / WorkBuddy / Cursor | ✅ |
-| 🖥️ **双入口** | CLI（Typer + Rich）和 Web UI（React + FastAPI），支持所有相同功能 | ✅ |
+| 🖥️ **双界面** | CLI（Typer + Rich）+ Web UI（React + FastAPI），功能完全对齐 | ✅ |
 | 🕸️ **Web UI** | 现代 React 单页应用，含语义搜索、记忆管理、D3 图谱、设置 | ✅ |
 | 🕸️ **D3 图谱** | 交互式力导向知识图谱，支持缩放/平移/拖拽 | ✅ |
 | 🌙 **暗色模式** | 亮色/暗色主题切换（保存在 localStorage） | ✅ |
@@ -139,7 +139,6 @@ pip install -r requirements.txt
 **快捷入口（Windows）：**
 ```bash
 # 双击 ariadne-cli.bat  打开命令行
-# 双击 ariadne-gui.bat   旧版 Tkinter 界面（已弃用）
 # 双击 ariadne-web.bat   现代 Web UI（推荐）
 ```
 
@@ -178,10 +177,7 @@ python -m ariadne.cli ingest ./papers/ -r -m "Research Notes"
 python -m ariadne.cli search "AI ethics" -m "Research Notes"
 
 # 合并多个记忆系统
-python -m ariadne.cli memory merge old_notes temp "Consolidated"
-
-# 启动 GUI
-python -m ariadne.cli gui
+python -m ariadne.cli memory merge old_notes temp --into "Consolidated"
 ```
 
 ### Python API
@@ -221,12 +217,11 @@ for doc, score in results:
 | `search` | 语义搜索 | `ariadne search "AI伦理"` |
 | `info` | 查看系统信息 | `ariadne info --stats` |
 | `web run` | 启动 Web UI | `ariadne web run --port 8770` |
-| `gui` | 启动图形界面（已弃用） | `ariadne gui` |
 | `memory list` | 列出所有记忆系统 | `ariadne memory list` |
 | `memory create` | 创建新记忆系统 | `ariadne memory create "Research"` |
 | `memory rename` | 重命名记忆系统 | `ariadne memory rename old new` |
 | `memory delete` | 删除记忆系统 | `ariadne memory delete old` |
-| `memory merge` | 合并记忆系统 | `ariadne memory merge a b new` |
+| `memory merge` | 合并记忆系统 | `ariadne memory merge a b --into new` |
 | `memory export` | 导出记忆系统 | `ariadne memory export research ./backup/` |
 | `memory import` | 导入记忆系统 | `ariadne memory import ./backup/ imported` |
 | `config show` | 显示当前配置 | `ariadne config show` |
@@ -235,6 +230,9 @@ for doc, score in results:
 | `config set-api-key` | 设置 API 密钥 | `ariadne config set-api-key deepseek sk-xxxxx` |
 | `advanced summarize` | 生成摘要 | `ariadne advanced summarize "AI"` |
 | `advanced graph` | 知识图谱 | `ariadne advanced graph -f dot` |
+| `rag search` | RAG 混合搜索 | `ariadne rag search "query" -m default` |
+| `rag rebuild-index` | 重建 BM25 索引 | `ariadne rag rebuild-index` |
+| `rag health` | RAG 健康检查 | `ariadne rag health` |
 
 ---
 
@@ -243,73 +241,96 @@ for doc, score in results:
 ```
 ariadne/
 ├── __init__.py              # 公共 API 入口（自动初始化 vendor）
-├── cli.py                   # 命令行工具
-├── gui.py                  # Tkinter GUI 图形界面
-├── config.py               # 统一配置系统（自动迁移 ~/.ariadne → .ariadne/）
-├── paths.py                # 路径管理模块（统一数据目录定位）
+├── cli.py                   # 命令行工具（Typer + Rich）
+├── config.py               # 统一配置系统
+├── paths.py                # 路径管理模块
 ├── advanced.py             # 高级功能（摘要/可视化/导出）
 ├── i18n.py                 # 多语言国际化支持（8种语言）
+├── logging.py              # 会话日志（自动轮转）
+├── models.py               # 共享数据模型
 ├── ingest/                 # 摄入模块
 │   ├── base.py             # BaseIngestor 抽象基类 + Document 数据模型
-│   ├── markdown.py        # Markdown 摄入器
-│   ├── word.py            # Word (.docx) 摄入器
-│   ├── ppt.py             # PowerPoint (.pptx) 摄入器
-│   ├── pdf.py             # PDF 摄入器
-│   ├── txt.py             # 纯文本摄入器
-│   ├── conversation.py    # 对话历史摄入器
-│   ├── mindmap.py         # 思维导图摄入器
-│   ├── code.py            # 代码注释摄入器
-│   ├── excel.py           # Excel 摄入器
-│   ├── csv.py             # CSV 摄入器
-│   ├── binary.py          # 二进制文件摄入器
-│   ├── epub.py            # EPUB 电子书摄入器
-│   ├── image.py           # 图片/OCR 摄入器
-│   ├── academic.py        # BibTeX/RIS 摄入器
-│   ├── web.py             # 网页摄入器
-│   ├── email.py           # 邮件摄入器
-│   └── media.py          # 视频/音频摄入器
-├── memory/                # 向量记忆存储层
-│   ├── store.py          # ChromaDB 向量存储实现
-│   └── manager.py        # 多记忆系统管理器 + 导出/导入
-├── llm/                   # LLM 统一接口
-│   ├── base.py           # BaseLLM 抽象基类
-│   ├── factory.py       # LLM 工厂 + ConfigManager
-│   ├── providers.py     # 各提供商实现（9个提供商）
-│   ├── reranker.py      # 语义重排
-│   └── chunker.py       # 智能分块
-├── graph/                 # 知识图谱
-│   ├── models.py        # Entity/Relation 数据模型
-│   ├── extractor.py    # 实体/关系抽取
-│   ├── storage.py      # NetworkX + SQLite 存储
-│   └── query.py        # 图查询接口
-├── mcp/                   # MCP Server
-│   ├── server.py       # MCP Server 核心实现
-│   ├── tools.py        # MCP Tools
-│   ├── resources.py   # MCP Resources
-│   └── prompts.py     # MCP Prompts
-└── locale/               # 国际化翻译文件（8种语言）
+│   ├── markdown.py         # Markdown 摄入器
+│   ├── word.py             # Word (.docx) 摄入器
+│   ├── ppt.py              # PowerPoint (.pptx) 摄入器
+│   ├── pdf.py              # PDF 摄入器
+│   ├── txt.py              # 纯文本摄入器
+│   ├── conversation.py     # 对话历史摄入器
+│   ├── mindmap.py          # 思维导图摄入器
+│   ├── code.py             # 代码注释摄入器
+│   ├── excel.py            # Excel 摄入器
+│   ├── csv.py              # CSV 摄入器
+│   ├── binary.py           # 二进制文件摄入器
+│   ├── epub.py             # EPUB 电子书摄入器
+│   ├── image.py            # 图片/OCR 摄入器
+│   ├── academic.py         # BibTeX/RIS 摄入器
+│   ├── web.py              # 网页摄入器
+│   ├── email.py            # 邮件摄入器
+│   ├── media.py            # 视频/音频摄入器
+│   └── markitdown_ingestor.py  # 通用格式摄入（markitdown，22+ 格式）
+├── memory/                 # 向量记忆存储层
+│   ├── store.py            # ChromaDB 向量存储 + 延迟删除
+│   └── manager.py          # 多记忆系统管理器 + 导出/导入
+├── llm/                    # LLM 统一接口
+│   ├── base.py             # BaseLLM 抽象基类
+│   ├── factory.py          # LLM 工厂 + ConfigManager
+│   ├── providers.py        # 各提供商实现（9个提供商）
+│   ├── reranker.py         # 语义重排
+│   └── chunker.py          # 智能分块
+├── graph/                  # 知识图谱
+│   ├── models.py           # Entity/Relation 数据模型
+│   ├── extractor.py        # 实体/关系抽取
+│   ├── storage.py          # NetworkX + SQLite 存储
+│   └── query.py            # 图查询接口
+├── plugins/                # 插件/Hook 系统
+│   ├── registry.py         # IngestorRegistry（优先级注册、装饰器 API）
+│   ├── hooks.py            # HookManager（4个生命周期钩子）
+│   ├── loader.py           # 插件发现（entry_points + 目录扫描）
+│   └── __init__.py         # 公共 API（ingest_hook, on, ...）
+├── rag/                    # RAG 管道
+│   ├── bm25_retriever.py   # BM25 检索器
+│   ├── hybrid_search.py    # 混合搜索（向量 + BM25，RRF 融合）
+│   ├── reranker.py         # 交叉编码器重排序
+│   ├── citation.py         # 引用生成器
+│   └── engine.py           # RAG 引擎
+├── mcp/                    # MCP Server
+│   ├── server.py           # MCP Server 核心实现（stdio / HTTP）
+│   ├── tools.py            # MCP Tools（4个工具）
+│   ├── resources.py        # MCP Resources
+│   └── prompts.py          # MCP Prompts
+├── web/                    # Web UI（React + FastAPI）
+│   ├── api.py              # FastAPI REST API（20+ 端点）
+│   ├── __init__.py         # Web 入口
+│   ├── static/             # 部署的生产构建
+│   └── frontend/           # React + Vite + TypeScript 源码
+│       └── src/
+│           ├── api/        # API 客户端（ariadne.ts）
+│           ├── components/ # 布局、主题、国际化
+│           └── pages/      # Home/Search/Memory/Ingest/Graph/Settings
+└── locale/                 # 国际化翻译文件（8种语言）
 
-.ariadne/                  # 项目本地数据目录（不在 Git 中）
-├── config.json            # 用户配置（API Key 等，不推送）
-├── .env                   # 环境变量（可选）
-├── memories/              # 记忆系统目录
-│   ├── manifest.json     # 记忆系统注册表
-│   └── {name}/           # 每个记忆系统的 ChromaDB 数据
-├── knowledge_graph.db     # 知识图谱 SQLite 数据库
-└── chroma/                # ChromaDB 默认持久化目录
+.ariadne/                   # 项目本地数据目录（不在 Git 中）
+├── config.json             # 用户配置（API Key 等，不推送）
+├── .env                    # 环境变量（可选）
+├── memories/               # 记忆系统目录
+│   ├── manifest.json       # 记忆系统注册表
+│   └── {name}/             # 每个记忆系统的 ChromaDB 数据
+├── knowledge_graph.db      # 知识图谱 SQLite 数据库
+├── logs/                   # 会话日志（自动轮转，保留10次）
+└── chroma/                 # ChromaDB 默认持久化目录
 
-vendor/                    # 第三方库本地化
-├── __init__.py           # 自动初始化脚本（HF_HOME / CHROMA_CACHE 重定向）
-├── packages/             # pip whl 包
-├── models/               # 本地模型缓存（all-MiniLM-L6-v2）
-└── cache/                # 运行时缓存（Chroma ONNX 等）
+vendor/                     # 第三方库本地化
+├── __init__.py             # 自动初始化脚本（HF_HOME / CHROMA_CACHE 重定向）
+├── packages/               # pip whl 包
+├── models/                 # 本地模型缓存（all-MiniLM-L6-v2）
+└── cache/                  # 运行时缓存（Chroma ONNX 等）
 ```
 
 ---
 
 ## 开发路线 / Roadmap
 
-> **当前阶段**：第二阶段 Web UI ✅ 已完成 | 第三阶段 插件系统 🔄
+> **当前阶段**：第二阶段 Web UI ✅ 已完成 | 第三阶段 插件系统 ✅ 已完成 | 第六阶段 社区运营与迭代 🔄
 
 ### 第一阶段 MVP ✅ **已完成**
 - [x] 项目骨架与目录结构
@@ -317,41 +338,39 @@ vendor/                    # 第三方库本地化
 - [x] ChromaDB 向量存储层
 - [x] CLI 工具（ingest / search / info）
 - [x] 中英双语 README
-- [x] 核心数据模型（Document / Entity / Relation）确认
+- [x] 核心数据模型（Document / Entity / Relation）
 - [x] ChromaDB 运行时验证
 - [x] 各摄入器单元测试
 - [x] 批量摄入与进度条支持
-- [x] **Tkinter GUI 原型**（CLI/GUI 双入口）
 - [x] 记忆系统 CRUD 管理
-- [x] 记忆系统导出/导入功能（CLI `memory export` / `memory import`，GUI 工具栏按钮）
+- [x] 记忆系统导出/导入功能（CLI `memory export` / `memory import`）
 - [x] 数据目录迁移至项目根目录 `.ariadne/`（不再使用 `~/.ariadne`）
 - [x] 第三方库本地化（vendor 目录）+ 模型缓存本地化
 
-### 第二阶段 LLM 增强 ✅ **已完成**
+### 第一阶段 LLM 增强 ✅ **已完成**
 - [x] LLM 统一抽象接口（DeepSeek / Claude / Qwen / ChatGPT / Gemini / Grok / Kimi / MiniMax / GLM）
-- [x] `config.json` 配置文件管理（项目根目录 `.ariadne/config.json`）
+- [x] `config.json` 配置文件管理
 - [x] LLM 增强语义重排（Reranker）
 - [x] 智能动态分块（SemanticChunker 替代固定长度）
 - [x] 新增 Kimi / MiniMax / GLM 提供商（9个提供商总计）
-- [x] GUI 内 LLM 模型切换功能
 - [x] **智能摘要修复** — 修复 Summarize prompt 中 JSON 示例花括号转义问题
 
 ### 第二阶段 Web UI ✅ **已完成**
 - [x] `ariadne web run/info` CLI 命令
-- [x] FastAPI REST API（12+ 端点覆盖全部 CLI 功能）
+- [x] FastAPI REST API（20+ 端点覆盖全部 CLI 功能）
 - [x] React + Vite + TypeScript SPA（6 个页面：Home/Search/Memory/Ingest/Graph/Settings）
-- [x] Vite 开发服务器配置 API 代理（`/api` → `localhost:8770`）
-- [x] **D3.js 交互式知识图谱** — 力导向图谱，支持缩放/平移/拖拽、节点点击详情
-- [x] **SSE 实时摄入进度** — Server-Sent Events 流式推送，实时显示处理状态
+- [x] Vite 开发服务器配置 API 代理
+- [x] **D3.js 交互式知识图谱** — 力导向图谱，支持缩放/平移/拖拽
+- [x] **SSE 实时摄入进度** — Server-Sent Events 流式推送
 - [x] **暗色/亮色主题切换**（保存在 localStorage）
 - [x] **响应式移动端适配**（<768px / <480px）
-- [x] 快捷入口脚本（ariadne-web.bat / ariadne-web.sh）
-- [x] **图谱导出** — HTML/Markdown/DOCX/SVG/JSON/Mermaid/PNG 6种格式
-- [x] **图谱筛选** — 按实体类型筛选（人物/组织/地点/概念/技术/事件）
+- [x] **图谱导出** — HTML/Markdown/DOCX/SVG/JSON/Mermaid/PNG/DOT
+- [x] **图谱筛选** — 按实体类型筛选
 - [x] **图谱节点搜索** — 搜索并高亮指定节点
 - [x] **图谱悬停高亮** — 鼠标悬停时高亮关联边
-- [x] **搜索自动补全** — 实时搜索建议，支持键盘上下导航
+- [x] **搜索自动补全** — 实时搜索建议，支持键盘导航
 - [x] **Web UI 国际化** — 8种语言支持，侧边栏语言切换器
+- [x] **Web UI 功能对齐** — 记忆详情/清空、RAG 参数调节、实体查询、完整配置查看
 
 ### 第三阶段 知识图谱 ✅ **已完成**
 - [x] 实体识别 + 关系抽取（LLM API 驱动）
@@ -361,17 +380,25 @@ vendor/                    # 第三方库本地化
 - [x] 交互式图谱可视化（HTML/DOT/Mermaid 格式）
 - [ ] 🔨 **知识系统分析比对**（多记忆系统间差异对比、知识覆盖度分析）
 
+### 第三阶段+ 插件/Hook 系统 ✅ **已完成**
+- [x] `ariadne/plugins/` — IngestorRegistry + HookManager + PluginLoader
+- [x] 动态摄入器注册（优先级注册、装饰器 API）
+- [x] 4 个生命周期钩子（before_ingest / after_ingest / before_search / after_search）
+- [x] 插件发现（Python entry_points + 目录扫描）
+- [x] 统一 SCAN_EXTENSIONS 从 IngestorRegistry 获取（61 个内置扩展名）
+- [x] 配置支持：`plugins` 节
+
 ### 第四阶段 媒体支持与学术工具 🔄 **部分完成**
 - [x] EPUB 电子书摄入
 - [x] 图片摄入（元数据提取）
 - [x] 图片 / 扫描版 PDF OCR（pytesseract / RapidOCR）
-- [x] 学术文献元数据（BibTeX / RIS）管理
-- [x] 网页链接摄入（URL 抓取 + 本地 HTML 文件）
+- [x] 学术文献元数据（BibTeX / RIS）
+- [x] 网页链接摄入（URL 抓取 + 本地 HTML）
 - [x] 电子邮件摄入（EML/MBOX 解析）
-- [x] 视频文件摄入（mp4 等格式元数据+字幕提取）
-- [x] 音频文件摄入（mp3 等格式语音转录）
+- [x] 视频文件摄入（元数据+字幕提取）
+- [x] 音频文件摄入（语音转录）
 - [ ] 🔨 **聊天记录摄取** — QQ、微信、飞书等 IM 对话记录解析
-- [ ] 🔨 **OCR + 视听增强** — 非文字图片/视频调用转述模型（Whisper/视觉LLM）摄入知识
+- [ ] 🔨 **OCR + 视听增强** — 非文字图片/视频调用转述模型（Whisper/视觉LLM）
 - [ ] 🔨 **OFD 文件支持** — 国内税务/发票替代 PDF 格式
 
 ### 第五阶段 MCP Server ✅ **已完成**
@@ -380,23 +407,25 @@ vendor/                    # 第三方库本地化
 - [x] MCP Resources：`collections` / `stats` / `config` / `graph`
 - [x] MCP Prompts：`search` / `ingest` / `graph` / `context` / `compare`
 
-#### Phase 5 扩展功能 🔨 **待开发**
-- [ ] 🔨 **AI Agent 对话记忆实时向量化** — 在与 AI Agent（如 OpenClaw、Claude Code、Codex、Trae、WorkBuddy、QClaw 等）对话时，自动将对话记忆（如 MEMORY.md）实时向量化并摄入知识系统，实现对话历史的永久扩展检索。参考 MemPalace 的会话上下文管理方案。
+#### 第五阶段 扩展功能 🔨 **待开发**
+- [ ] 🔨 **AI Agent 对话记忆实时向量化** — 在与 AI Agent 对话时，自动将对话记忆实时向量化并摄入知识系统，实现对话历史的永久扩展检索
 
 ### v0.3.0 增强版 ✅ **已完成**
 - [x] 第三方库本地化（vendor 目录）
 - [x] 模型缓存本地化（all-MiniLM-L6-v2）
 - [x] 二进制文件处理（提取文件名为知识引用）
 - [x] 扩展 LLM 提供商示例（config.sample.json 含 9 个模板）
-- [x] 快捷入口脚本（ariadne-cli.bat / ariadne-gui.bat）
+- [x] 快捷入口脚本（ariadne-cli.bat / ariadne-web.bat）
 - [x] 日语支持（ja locale，总计 8 种语言）
 - [x] .gitignore 更新（config.json / .ariadne 不推送）
 
 ### 第六阶段 社区运营与迭代（持续）
-- [x] GitHub 正式发布 v0.2.0 → v0.6.1
+- [x] GitHub 正式发布 v0.2.0 → v0.6.2
 - [x] **Web UI（FastAPI + React）** — 现代跨平台界面，替代旧版 Tkinter
-- [ ] 🔨 **实时摄入进度** — SSE 实时上传进度
-- [ ] 🔨 **精美图谱可视化** — D3.js 交互式知识图谱增强（筛选、高亮、导出）
+- [x] **实时摄入进度** — SSE 实时上传进度
+- [x] **精美图谱可视化** — D3.js 交互式知识图谱增强（筛选、高亮、导出）
+- [x] **Web UI 功能对齐** — 记忆详情/清空、RAG 参数、实体查询、DOT 导出、完整配置
+- [x] **会话日志** — `.ariadne/logs/` 自动轮转
 - [ ] 🔨 **Wiki 页面与详细使用文档**
 - [ ] 🔨 **Logo 与 Icon 设计**
 - [ ] 🔨 **云备份与联网查询**（记忆系统云端同步 + 实时信息检索增强）
