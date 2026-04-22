@@ -177,6 +177,10 @@ class RAGEngine:
         fetch_k = fetch_k or self._default_fetch_k
         alpha = alpha if alpha is not None else self._alpha
 
+        # Fire before_search hook — allows query rewriting/expansion
+        from ariadne.plugins.hooks import HookManager
+        query = HookManager.fire("before_search", query)
+
         result = RAGResult(query=query)
         t0 = time.time()
 
@@ -237,6 +241,13 @@ class RAGEngine:
             result.timings["context_ms"] = (time.time() - t_ctx) * 1000
 
         result.timings["total_ms"] = (time.time() - t0) * 1000
+
+        # Fire after_search hook — allows result filtering, enrichment, etc.
+        if result.results:
+            result.results = HookManager.fire(
+                "after_search", result.results, query=query
+            )
+
         return result
 
     def _build_context(

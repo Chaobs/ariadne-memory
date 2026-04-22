@@ -273,6 +273,11 @@ class AriadneConfig:
             "reranker_top_k": 5,
             "initial_top_k": 20,
         },
+        "plugins": {
+            "enabled": [],
+            "directories": [],
+            "config": {},
+        },
     }
     
     # Supported providers for display

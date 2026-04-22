@@ -406,22 +406,15 @@ async def import_memory(
 
 ingest_router = APIRouter()
 
-# Supported extensions for scanning
-SCAN_EXTENSIONS = {
-    ".md", ".markdown", ".txt", ".pdf", ".docx", ".pptx",
-    ".xlsx", ".xls", ".csv", ".json",
-    ".mm", ".xmind",
-    ".py", ".java", ".cpp", ".c", ".h", ".hpp",
-    ".js", ".ts", ".jsx", ".tsx", ".cs", ".go", ".rs", ".rb",
-    ".php", ".swift", ".kt", ".scala",
-    ".epub", ".bib", ".ris",
-    ".eml", ".mbox",
-    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp",
-    ".mp4", ".avi", ".mkv", ".mov",
-    ".mp3", ".wav", ".m4a", ".flac", ".ogg",
-    ".html", ".htm", ".rss", ".ipynb", ".msg", ".rtf",
-    ".ods", ".odt", ".odp", ".xml",
-}
+
+def _get_scan_extensions() -> set:
+    """Get supported file extensions from the IngestorRegistry."""
+    from ariadne.plugins.registry import IngestorRegistry
+    return IngestorRegistry.get_supported_extensions()
+
+
+# Supported extensions for directory scanning (derived from registry)
+SCAN_EXTENSIONS = _get_scan_extensions()
 
 
 @ingest_router.post("/files", response_model=IngestResultResponse)
@@ -1534,6 +1527,12 @@ def run_server(host: str = "127.0.0.1", port: int = 8770, reload: bool = False):
     # Start session logging
     session_log = get_session_logger()
     session_log.start("web", host=host, port=port, version=__version__)
+
+    # Load plugins from entry_points and configured directories
+    from ariadne.plugins.loader import load_all_plugins
+    loaded = load_all_plugins()
+    if loaded:
+        session_log.info("plugins_loaded", count=len(loaded), names=loaded)
 
     static_dir = Path(__file__).parent / "static"
     try:

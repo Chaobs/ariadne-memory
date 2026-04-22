@@ -42,6 +42,9 @@ from ariadne.ingest.base import BaseIngestor
 from ariadne.config import AriadneConfig, get_config
 from ariadne.advanced import Summarizer, GraphVisualizer, Exporter
 
+# Plugin system exports
+from ariadne.plugins import ingest_hook, on, IngestorRegistry, HookManager
+
 __all__ = [
     # Version info
     "__version__",
@@ -58,6 +61,12 @@ __all__ = [
     "Summarizer",
     "GraphVisualizer",
     "Exporter",
+
+    # Plugin system
+    "ingest_hook",
+    "on",
+    "IngestorRegistry",
+    "HookManager",
 ]
 
 # GUI is optional (requires tkinter)

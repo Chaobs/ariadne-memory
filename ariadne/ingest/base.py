@@ -143,6 +143,7 @@ class BaseIngestor(ABC):
         1. File existence validation
         2. Chunking via _extract()
         3. Wrapping each chunk in a Document with metadata
+        4. Firing before_ingest / after_ingest hooks
 
         Args:
             file_path: Path to the file to ingest.
@@ -158,13 +159,17 @@ class BaseIngestor(ABC):
         if not path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
+        # Fire before_ingest hook — allows plugins to preprocess
+        from ariadne.plugins.hooks import HookManager
+        file_path = HookManager.fire("before_ingest", file_path)
+
         blocks = self._extract(path)
         total = len(blocks)
 
         from datetime import datetime, timezone
         now_iso = datetime.now(timezone.utc).isoformat()
 
-        return [
+        docs = [
             Document(
                 content=block.strip(),
                 source_type=self.source_type,
@@ -181,6 +186,11 @@ class BaseIngestor(ABC):
             for i, block in enumerate(blocks)
             if block.strip()
         ]
+
+        # Fire after_ingest hook — allows plugins to add metadata, filter, etc.
+        docs = HookManager.fire("after_ingest", docs, file_path=str(path))
+
+        return docs
 
     @staticmethod
     def chunk_text(text: str, max_chars: int = 500, overlap: int = 50) -> List[str]:

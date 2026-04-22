@@ -53,23 +53,13 @@ from ariadne.config import (
 # Rich console for styled output
 console = Console()
 
-# Supported extensions for directory scanning
-SCAN_EXTENSIONS = {
-    ".md", ".markdown", ".txt", ".pdf", ".docx", ".pptx",
-    ".xlsx", ".xls", ".csv", ".json",
-    ".mm", ".xmind",
-    ".py", ".java", ".cpp", ".c", ".h", ".hpp",
-    ".js", ".ts", ".jsx", ".tsx", ".cs", ".go", ".rs", ".rb",
-    ".php", ".swift", ".kt", ".scala",
-    ".epub", ".bib", ".ris",
-    ".eml", ".mbox",
-    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp",
-    ".mp4", ".avi", ".mkv", ".mov",
-    ".mp3", ".wav", ".m4a", ".flac", ".ogg",
-    # markitdown-supported
-    ".html", ".htm", ".rss", ".ipynb", ".msg", ".rtf",
-    ".ods", ".odt", ".odp", ".xml",
-}
+
+# Supported extensions for directory scanning (derived from registry)
+def _get_scan_extensions() -> set:
+    from ariadne.plugins.registry import IngestorRegistry
+    return IngestorRegistry.get_supported_extensions()
+
+SCAN_EXTENSIONS = _get_scan_extensions()
 
 
 def resolve_ingestor(path: Path):

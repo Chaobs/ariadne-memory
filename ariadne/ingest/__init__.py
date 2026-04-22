@@ -100,9 +100,12 @@ def get_ingestor(source: str) -> BaseIngestor:
     """
     Factory function to get the appropriate ingestor for a source.
 
+    This function delegates to IngestorRegistry.get_ingestor(), which
+    supports both built-in and plugin-registered ingestors.
+
     Resolution priority:
     1. URL → WebIngestor
-    2. Extension with a native ingestor → that ingestor
+    2. Extension with a registered ingestor → that ingestor (highest priority)
     3. Extension in markitdown's preferred set → MarkItDownIngestor
     4. Extension in markitdown's fallback set → try native first, then markitdown
     5. Unknown extension → MarkItDownIngestor (if available), else BinaryIngestor
@@ -116,110 +119,5 @@ def get_ingestor(source: str) -> BaseIngestor:
     Raises:
         ValueError: If no ingestor found for the source type
     """
-    from pathlib import Path
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    source_lower = source.lower()
-
-    # Check for URL first
-    if source_lower.startswith(("http://", "https://", "ftp://")):
-        return WebIngestor()
-
-    # Get file extension
-    path = Path(source)
-    ext = path.suffix.lower() if path.suffix else ""
-
-    # Native ingestors — format-specific logic (tried first)
-    EXTENSION_MAP = {
-        ".md": MarkdownIngestor,
-        ".markdown": MarkdownIngestor,
-        ".docx": WordIngestor,
-        ".pptx": PPTIngestor,
-        ".pdf": PDFIngestor,
-        ".txt": TxtIngestor,
-        ".json": ConversationIngestor,
-        ".mm": MindMapIngestor,
-        ".xmind": MindMapIngestor,
-        ".py": CodeIngestor,
-        ".java": CodeIngestor,
-        ".cpp": CodeIngestor,
-        ".c": CodeIngestor,
-        ".h": CodeIngestor,
-        ".hpp": CodeIngestor,
-        ".js": CodeIngestor,
-        ".ts": CodeIngestor,
-        ".jsx": CodeIngestor,
-        ".tsx": CodeIngestor,
-        ".cs": CodeIngestor,
-        ".go": CodeIngestor,
-        ".rs": CodeIngestor,
-        ".rb": CodeIngestor,
-        ".php": CodeIngestor,
-        ".swift": CodeIngestor,
-        ".kt": CodeIngestor,
-        ".scala": CodeIngestor,
-        ".xlsx": ExcelIngestor,
-        ".xls": ExcelIngestor,
-        ".csv": CsvIngestor,
-        ".epub": EPUBIngestor,
-        ".bib": BibTeXIngestor,
-        ".ris": RISIngestor,
-        ".eml": EmailIngestor,
-        ".mbox": MBOXIngestor,
-        ".jpg": ImageIngestor,
-        ".jpeg": ImageIngestor,
-        ".png": ImageIngestor,
-        ".gif": ImageIngestor,
-        ".bmp": ImageIngestor,
-        ".tiff": ImageIngestor,
-        ".webp": ImageIngestor,
-        ".mp4": VideoIngestor,
-        ".avi": VideoIngestor,
-        ".mkv": VideoIngestor,
-        ".mov": VideoIngestor,
-        ".mp3": AudioIngestor,
-        ".wav": AudioIngestor,
-        ".m4a": AudioIngestor,
-        ".flac": AudioIngestor,
-        ".ogg": AudioIngestor,
-    }
-
-    if ext in EXTENSION_MAP:
-        return EXTENSION_MAP[ext]()
-
-    # Markitdown preferred extensions — formats with no native ingestor
-    MARKITDOWN_PREFERRED = {
-        ".html", ".htm", ".rss", ".ipynb", ".msg", ".rtf",
-        ".ods", ".odt", ".odp", ".xml", ".htm",
-    }
-
-    if ext in MARKITDOWN_PREFERRED:
-        try:
-            return MarkItDownIngestor()
-        except ImportError:
-            logger.warning(
-                f"markitdown not installed; falling back to BinaryIngestor for {ext}"
-            )
-            return BinaryIngestor()
-
-    # Markitdown fallback extensions — try markitdown if native fails
-    MARKITDOWN_FALLBACK = {
-        ".pdf", ".docx", ".pptx", ".xlsx", ".xls", ".csv",
-        ".epub", ".txt", ".md",
-    }
-
-    if ext in MARKITDOWN_FALLBACK:
-        # Native ingestor should have matched above, but if we got here
-        # it means the extension wasn't in EXTENSION_MAP. Try markitdown.
-        try:
-            return MarkItDownIngestor()
-        except ImportError:
-            return BinaryIngestor()
-
-    # Unknown extension — try markitdown first, then binary
-    try:
-        return MarkItDownIngestor()
-    except ImportError:
-        return BinaryIngestor()
+    from ariadne.plugins.registry import IngestorRegistry
+    return IngestorRegistry.get_ingestor(source)
