@@ -308,7 +308,7 @@ ariadne/
 │           ├── api/        # API client (ariadne.ts)
 │           ├── components/ # Layout, theme, i18n
 │           └── pages/      # Home/Search/Memory/Ingest/Graph/Settings
-└── locale/                 # i18n translation files (8 languages)
+└── locale/                 # (removed — Web UI has its own i18n)
 
 .ariadne/                   # Project local data (not in Git)
 ├── config.json             # User config (API keys, not committed)
@@ -343,7 +343,7 @@ vendor/                     # Third-party packages
 - [x] ChromaDB runtime verification
 - [x] Unit tests for all ingestors
 - [x] Batch ingestion with progress bar
-- [x] **Tkinter GUI prototype** (CLI/GUI dual entry)
+- [x] **Tkinter GUI prototype** (replaced by Web UI)
 - [x] Memory system CRUD management
 - [x] Memory system export/import (CLI + GUI toolbar)
 - [x] Data directory migrated to `.ariadne/` (not `~/.ariadne`)
@@ -417,7 +417,7 @@ vendor/                     # Third-party packages
 - [x] Model cache localization (all-MiniLM-L6-v2)
 - [x] Binary file handling (extract filenames as knowledge references)
 - [x] Extended LLM provider examples (config.sample.json with 9 templates)
-- [x] Shortcut scripts (ariadne-cli.bat / ariadne-gui.bat)
+- [x] Shortcut scripts (ariadne-cli.bat / ariadne-web.bat)
 - [x] Japanese support (ja locale, 8 languages total)
 - [x] .gitignore update (config.json / .ariadne not committed)
 

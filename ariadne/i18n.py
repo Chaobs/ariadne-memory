@@ -11,11 +11,11 @@ Supports 8 languages:
   - ru     Russian
   - ar     Arabic (RTL)
 
-Usage:
-    from ariadne.i18n import _, set_locale, available_locales, get_locale_display
+The Web UI uses its own frontend i18n (React i18next).
+This module provides the backend locale registry and configuration.
 
-    # Get translated string
-    label = _("Search")
+Usage:
+    from ariadne.i18n import set_locale, available_locales, get_locale_display
 
     # Switch language at runtime
     set_locale("fr")
@@ -23,28 +23,20 @@ Usage:
     # Query current locale
     current = get_locale()   # e.g. "fr"
     display = get_locale_display()  # e.g. "Français"
-
-Language files are stored in:
-    ariadne/locale/<lang>/LC_MESSAGES/ariadne.mo
-
-To compile .po → .mo:
-    msgfmt ariadne/locale/<lang>/LC_MESSAGES/ariadne.po -o ariadne/locale/<lang>/LC_MESSAGES/ariadne.mo
 """
 
 from __future__ import annotations
 
-import gettext as _gettext
 import os
 import threading
-from pathlib import Path
-from typing import Optional
 
 __all__ = [
-    "_",
     "set_locale",
     "get_locale",
     "get_locale_display",
     "available_locales",
+    "init_locale",
+    "is_rtl",
 ]
 
 # ---------------------------------------------------------------------------
@@ -62,53 +54,9 @@ AVAILABLE_LOCALES: list[tuple[str, str]] = [
     ("ar",    "العربية"),
 ]
 
-# Language code → domain name (all share the same .mo files)
-DOMAIN = "ariadne"
-LOCALE_DIR = Path(__file__).parent.parent / "locale"
-
 # Thread-safe current locale
 _current_locale: str = "en"
 _locale_lock = threading.Lock()
-
-
-# ---------------------------------------------------------------------------
-# Translation function
-# ---------------------------------------------------------------------------
-
-def _get_translation(locale: str) -> _gettext.GNUTranslations:
-    """Load and return the translation object for the given locale."""
-    try:
-        return _gettext.translation(
-            domain=DOMAIN,
-            localedir=str(LOCALE_DIR),
-            languages=[locale],
-        )
-    except FileNotFoundError:
-        # Fall back to no translation (English strings)
-        return _gettext.NullTranslations()
-
-
-# The global translator — swapped by set_locale()
-_translator: _gettext.GNUTranslations = _gettext.NullTranslations()
-
-
-def _load_translator(locale: str) -> None:
-    global _translator
-    _translator = _get_translation(locale)
-
-
-# Load English (null translator / identity) by default
-_load_translator("en")
-
-
-def _(message: str) -> str:
-    """
-    Translate *message* to the current locale.
-
-    This is the standard gettext interface used throughout the codebase.
-    In the English locale, this is a no-op (identity function).
-    """
-    return _translator.gettext(message)
 
 
 # ---------------------------------------------------------------------------
@@ -124,10 +72,6 @@ def set_locale(locale: str) -> bool:
 
     Returns:
         True if the locale was found and activated, False otherwise.
-
-    Note:
-        Arabic (ar) sets LANG to "ar" but the UI framework (Tkinter)
-        must additionally configure text direction (LTR/RTL) separately.
     """
     global _current_locale
     valid_codes = {code for code, _ in AVAILABLE_LOCALES}
@@ -135,7 +79,6 @@ def set_locale(locale: str) -> bool:
         return False
     with _locale_lock:
         _current_locale = locale
-        _load_translator(locale)
     return True
 
 
@@ -171,7 +114,7 @@ def is_rtl() -> bool:
 def init_locale() -> None:
     """
     Auto-initialize locale from the ARIADNE_LANG environment variable.
-    Called automatically by cli.py and gui.py entry points.
+    Called automatically by cli.py and web entry points.
     Call this manually if you use the library programmatically.
     """
     env_locale = os.environ.get("ARIADNE_LANG", "")

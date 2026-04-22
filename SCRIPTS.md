@@ -7,7 +7,6 @@
 | Script | 功能 | 默认端口/地址 |
 |--------|------|-------------|
 | `ariadne-cli.bat` | 启动 CLI 交互界面 | — |
-| `ariadne-gui.bat` | 启动 Tkinter GUI 原型（已弃用） | — |
 | `ariadne-web.bat` | 启动 Web UI（推荐） | http://127.0.0.1:8770 |
 
 ### ariadne-web.bat（推荐）
@@ -21,12 +20,6 @@ ariadne-web.bat 8080     # 自定义端口
 
 ```bash
 ariadne-cli.bat
-```
-
-### ariadne-gui.bat
-
-```bash
-ariadne-gui.bat
 ```
 
 ## Linux / macOS (.sh)

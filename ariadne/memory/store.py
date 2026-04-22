@@ -99,7 +99,7 @@ class VectorStore:
 
     Design notes:
     - Uses ChromaDB's built-in embedding function (all-MiniLM-L6-v2 via sentence-transformers)
-    - Persists data to a local directory (default: ./ariadne_data)
+    - Persists data to a local directory (default: .ariadne/memories/)
     - Collection is auto-created on first add()
     - Documents are de-duplicated by doc_id
     - Supports multiple collections (for multi-memory systems)
@@ -131,12 +131,12 @@ class VectorStore:
 
         Args:
             persist_dir: Directory to persist ChromaDB data.
-                         Defaults to ./ariadne_data in the working directory.
+                         Defaults to .ariadne/memories/ under the project root.
             collection_name: Name of the collection. Defaults to DEFAULT_COLLECTION.
                             Use different collection names for different memory systems.
         """
         if persist_dir is None:
-            persist_dir = str(Path.cwd() / "ariadne_data")
+            persist_dir = str(Path.cwd() / ".ariadne" / "memories")
 
         self.persist_dir = persist_dir
         self.collection_name = collection_name or self.DEFAULT_COLLECTION

@@ -307,7 +307,7 @@ ariadne/
 │           ├── api/        # API 客户端（ariadne.ts）
 │           ├── components/ # 布局、主题、国际化
 │           └── pages/      # Home/Search/Memory/Ingest/Graph/Settings
-└── locale/                 # 国际化翻译文件（8种语言）
+└── locale/                 # (已移除 — Web UI 有自己的 i18n)
 
 .ariadne/                   # 项目本地数据目录（不在 Git 中）
 ├── config.json             # 用户配置（API Key 等，不推送）

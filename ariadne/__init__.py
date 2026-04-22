@@ -12,7 +12,7 @@ Features:
 - Knowledge graph extraction and visualization
 - LLM-powered features (summarization, entity extraction, reranking)
 - Multi-language support (7 UN languages)
-- CLI and GUI interfaces
+- CLI and Web UI interfaces
 
 Example:
     >>> from ariadne.ingest import MarkdownIngestor
@@ -69,9 +69,3 @@ __all__ = [
     "HookManager",
 ]
 
-# GUI is optional (requires tkinter)
-try:
-    import tkinter
-    _GUI_AVAILABLE = True
-except ImportError:
-    _GUI_AVAILABLE = False
