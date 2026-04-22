@@ -332,7 +332,7 @@ ariadne/
 docs/                       # Documentation
 ├── AGENT_INTEGRATION.md   # Agent integration guide (Claude Code, Cursor, WorkBuddy)
 ├── MCP.md                 # MCP Server documentation
-├── WORKBUDDY-SKILL.md     # WorkBuddy Skill definition file
+├── Ariadne-Memory-SKILL.md     # Agent Skill definition file (Claude Code, Cursor, etc.)
 ├── TEST_AND_EXTENSION_PLAN.md
 ├── AutoSave.md
 ├── Closet.md
@@ -369,7 +369,7 @@ Ariadne supports multiple AI Agent integrations:
 | Claude Code | MCP Server | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#claude-code) |
 | Cursor | MCP Server | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#cursor) |
 | Windsurf | MCP Server | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#windsurf) |
-| WorkBuddy | Skill + HTTP API | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#workbuddy-skill) |
+| Claude Code | Skill + HTTP API | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#agent-skill) |
 | Custom Agents | HTTP REST API | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#http-rest-api) |
 
 ### Quick Setup
@@ -386,8 +386,8 @@ Ariadne supports multiple AI Agent integrations:
 }
 ```
 
-**WorkBuddy Skill:**
-Copy `docs/WORKBUDDY-SKILL.md` to `~/.workbuddy/skills/ariadne-memory/SKILL.md`
+**Agent Skill:**
+Copy `docs/Ariadne-Memory-SKILL.md` to your agent's skill directory (e.g., `~/.workbuddy/skills/ariadne-memory/SKILL.md`)
 
 **HTTP API:**
 Start Web UI: `python -m ariadne.cli web run`

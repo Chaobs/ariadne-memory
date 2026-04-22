@@ -313,7 +313,7 @@ ariadne/
 docs/                       # 文档目录
 ├── AGENT_INTEGRATION.md   # Agent 集成指南（Claude Code, Cursor, WorkBuddy）
 ├── MCP.md                 # MCP Server 文档
-├── WORKBUDDY-SKILL.md    # WorkBuddy Skill 定义文件
+├── Ariadne-Memory-SKILL.md    # Agent Skill 定义文件（Claude Code, Cursor 等）
 ├── TEST_AND_EXTENSION_PLAN.md
 ├── AutoSave.md
 ├── Closet.md
@@ -350,7 +350,7 @@ Ariadne 支持多种 AI Agent 集成：
 | Claude Code | MCP Server | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#claude-code) |
 | Cursor | MCP Server | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#cursor) |
 | Windsurf | MCP Server | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#windsurf) |
-| WorkBuddy | Skill + HTTP API | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#workbuddy-skill) |
+| Claude Code | Skill + HTTP API | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#agent-skill) |
 | 自定义 Agent | HTTP REST API | [AGENT_INTEGRATION.md](docs/AGENT_INTEGRATION.md#http-rest-api) |
 
 ### 快速配置
@@ -367,8 +367,8 @@ Ariadne 支持多种 AI Agent 集成：
 }
 ```
 
-**WorkBuddy Skill：**
-将 `docs/WORKBUDDY-SKILL.md` 复制到 `~/.workbuddy/skills/ariadne-memory/SKILL.md`
+**Agent Skill：**
+将 `docs/Ariadne-Memory-SKILL.md` 复制到你的 Agent 的 skill 目录（如 `~/.workbuddy/skills/ariadne-memory/SKILL.md`）
 
 **HTTP API：**
 启动 Web UI：`python -m ariadne.cli web run`

@@ -455,31 +455,33 @@ ufw allow from 192.168.1.0/24 to any port 8770
 
 ---
 
-## 九、WorkBuddy Skill 集成
+## 九、Agent Skill 集成
+
+Ariadne-Memory-SKILL.md 定义了 Agent 集成规范，适用于 WorkBuddy、Claude Code、Cursor 等主流 Agent 工具。
 
 ### 9.1 安装 Skill
 
-WorkBuddy Skill 存储在 `docs/WORKBUDDY-SKILL.md`，可用于 WorkBuddy 的智能体集成。
+Skill 定义文件存储在 `docs/Ariadne-Memory-SKILL.md`。
 
 **安装步骤：**
 
-1. 找到 WorkBuddy 的 skills 目录（通常在 `~/.workbuddy/skills/`）
+1. 找到你的 Agent 的 skills 目录
 2. 创建 `ariadne-memory` 目录
-3. 将 `docs/WORKBUDDY-SKILL.md` 复制到该目录，重命名为 `SKILL.md`
+3. 将 `docs/Ariadne-Memory-SKILL.md` 复制到该目录，重命名为 `SKILL.md`
 
 ```powershell
-# Windows PowerShell
-Copy-Item "path/to/Ariadne/docs/WORKBUDDY-SKILL.md" "$env:USERPROFILE\.workbuddy\skills\ariadne-memory\SKILL.md"
+# Windows PowerShell (WorkBuddy)
+Copy-Item "path/to/Ariadne/docs/Ariadne-Memory-SKILL.md" "$env:USERPROFILE\.workbuddy\skills\ariadne-memory\SKILL.md"
 ```
 
 ```bash
 # Linux/macOS
-cp path/to/Ariadne/docs/WORKBUDDY-SKILL.md ~/.workbuddy/skills/ariadne-memory/SKILL.md
+cp path/to/Ariadne/docs/Ariadne-Memory-SKILL.md ~/.workbuddy/skills/ariadne-memory/SKILL.md
 ```
 
 ### 9.2 触发词
 
-WorkBuddy 会根据以下触发词自动调用 Ariadne Memory：
+支持 Skill 的 Agent 会根据以下触发词自动调用 Ariadne Memory：
 
 | 类别 | 触发词 |
 |------|--------|
@@ -490,7 +492,7 @@ WorkBuddy 会根据以下触发词自动调用 Ariadne Memory：
 
 ### 9.3 使用方式
 
-在 WorkBuddy 中直接对话：
+在支持 Skill 的 Agent 中直接对话：
 
 ```
 用户：帮我查一下机器学习优化的内容
@@ -513,13 +515,22 @@ ariadne web run
 
 Web 服务默认地址：`http://localhost:8770`
 
+### 9.5 支持的 Agent
+
+| Agent | 安装方式 | 触发 |
+|--------|----------|------|
+| WorkBuddy | 复制 SKILL.md 到 `~/.workbuddy/skills/` | 自动 |
+| Claude Code | MCP Server (推荐) 或 Skill | MCP 或 Skill |
+| Cursor | MCP Server | MCP |
+| Windsurf | MCP Server | MCP |
+
 ---
 
 ## 十、相关文档
 
 | 文档 | 路径 | 说明 |
 |------|------|------|
-| SKILL文件 | `docs/WORKBUDDY-SKILL.md` | WorkBuddy Skill 定义文件 |
+| Skill文件 | `docs/Ariadne-Memory-SKILL.md` | Agent Skill 定义文件 |
 | MCP文档 | `docs/MCP.md` | MCP Server 详细文档 |
 | MCP配置示例 | `examples/mcp_config.json` | MCP 客户端配置模板 |
 | 测试计划 | `docs/TEST_AND_EXTENSION_PLAN.md` | 测试方案和扩展计划 |
