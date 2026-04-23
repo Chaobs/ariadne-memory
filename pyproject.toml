@@ -99,6 +99,22 @@ packages = ["ariadne"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Run tests in alphabetical order (models → builder → linter → ingestor → obsidian → cli)
+# Add Python path so 'import vendor' works in tests
+pythonpath = ["."]
+# Coverage configuration
+addopts = [
+    "-ra",           # show summary of all test outcomes
+    "--tb=short",    # shorter traceback format
+]
+markers = [
+    "unit: Unit tests (no external dependencies, no LLM)",
+    "integration: Integration tests (may use filesystem)",
+    "slow: Tests that take longer to run",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
 
 [tool.ruff]
 line-length = 100

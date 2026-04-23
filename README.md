@@ -9,6 +9,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9+-green.svg)](pyproject.toml)
+[![Tests](https://img.shields.io/badge/Tests-115%20passed-brightgreen.svg)](#testing)
 
 ---
 
@@ -20,6 +21,7 @@
 - [CLI Usage](#cli-usage)
 - [Architecture](#architecture)
 - [LLM Wiki](#llm-wiki)
+- [Testing](#testing)
 - [Agent Integration](#agent-integration)
 - [Roadmap](#roadmap)
 - [Credits](#credits)
@@ -301,11 +303,6 @@ ariadne/
 │   ├── extractor.py        # Entity/relation extraction
 │   ├── storage.py          # NetworkX + SQLite storage
 │   └── query.py            # Graph query interface
-├── plugins/                # Plugin/Hook system
-│   ├── registry.py         # IngestorRegistry (priority-based, decorator API)
-│   ├── hooks.py            # HookManager (4 lifecycle hooks)
-│   ├── loader.py           # Plugin discovery (entry_points + directory scan)
-│   └── __init__.py         # Public API (ingest_hook, on, ...)
 ├── rag/                    # RAG Pipeline
 │   ├── bm25_retriever.py   # BM25 retriever
 │   ├── hybrid_search.py    # Hybrid search (vector + BM25, RRF fusion)
@@ -343,6 +340,7 @@ docs/                       # Documentation
 ├── AGENT_INTEGRATION.md   # Agent integration guide (Claude Code, Cursor, WorkBuddy)
 ├── MCP.md                 # MCP Server documentation
 ├── LLM_WIKI.md            # LLM Wiki feature guide (Karpathy pattern)
+├── FEATURE_DEPENDENCIES.md # Feature dependency guide (online/LLM/local)
 ├── Ariadne-Memory-SKILL.md     # Agent Skill definition file (Claude Code, Cursor, etc.)
 ├── TEST_AND_EXTENSION_PLAN.md
 ├── AutoSave.md
@@ -447,6 +445,29 @@ For AI Agent integration:
 | `ariadne_wiki_list` | List pages by type/tag |
 
 See [docs/LLM_WIKI.md](docs/LLM_WIKI.md) for detailed documentation.
+
+---
+
+## Testing
+
+Ariadne uses **pytest** with a comprehensive test suite covering core modules:
+
+| Test Suite | Coverage | Status |
+|------------|----------|--------|
+| `test_wiki_models` | WikiPage, WikiProject, YAML parsing, slug generation | 26 tests |
+| `test_wiki_builder` | File I/O, block parsing, LLM output parsing | 43 tests |
+| `test_wiki_linter` | Structural + semantic lint (mock LLM) | 35 tests |
+| `test_wiki_ingestor` | Two-step CoT ingest, truncation | 4 tests |
+| `test_wiki_obsidian` | Obsidian vault import, syntax conversion | 7 tests |
+
+**Run all tests:**
+```bash
+pytest tests/ -v
+# Or with coverage
+pytest tests/ -v --tb=short
+```
+
+**Current status: 115/115 tests passing ✅**
 
 ---
 
@@ -584,7 +605,7 @@ Then access REST API at `http://localhost:8770`
 - [x] **Beautiful graph visualization** — D3.js interactive knowledge graph
 - [x] **Web UI feature parity** — Memory clear/details, RAG params, entity query, DOT export, full config view
 - [x] **Session logging** — `.ariadne/logs/` with auto-rotation
-- [ ] 🔨 **Wiki pages and detailed documentation**
+- [x] **Wiki pages and detailed documentation** — `docs/LLM_WIKI.md` + wiki CLI (`ingest` / `query` / `lint` / `list`)
 - [ ] 🔨 **Logo and icon design**
 - [ ] 🔨 **Cloud backup & network query** (memory system cloud sync + real-time info retrieval)
 - [ ] 🔨 **Auto-ingest from watch directory** — Background file monitoring + auto-ingest

@@ -52,7 +52,7 @@ def parse_file_blocks(text: str) -> Tuple[List[Dict[str, str]], List[str]]:
     warnings: List[str] = []
 
     i = 0
-    while i < lines.length if hasattr(lines, 'length') else len(lines):
+    while i < (lines.length if hasattr(lines, 'length') else len(lines)):
         opener_match = OPENER_PATTERN.match(lines[i])
         if not opener_match:
             i += 1
@@ -422,9 +422,12 @@ def read_wiki_page(path: str) -> Optional[WikiPage]:
     # Extract body (after frontmatter)
     body = content
     if content.startswith("---"):
-        end_match = re.search(r'\n---\n', content[3:])
+        end_match = re.search(r'\n---\n?', content[3:])
         if end_match:
-            body = content[3 + end_match.start() + 4:]
+            # end_match covers the \n before --- plus the --- and optional trailing \n
+            # e.g. "\n---\n" (length 5) or "\n---" (length 4)
+            skip_len = len(end_match.group())  # 5 for \n---\n, 4 for \n---
+            body = content[3 + end_match.start() + skip_len:]
 
     return WikiPage(
         path=path,

@@ -121,6 +121,11 @@ class ObsidianIngestor(BaseIngestor):
     SUPPORTED_EXTENSIONS = [".md"]
     SOURCE_TYPE = SourceType.MARKDOWN
 
+    def _extract(self, path: "Path") -> List[str]:
+        """Return raw text content of the file as a single-element list."""
+        content = read_file_safe(str(path))
+        return [content] if content else []
+
     def can_handle(self, source: str) -> bool:
         return source.lower().endswith(".md")
 
@@ -172,7 +177,7 @@ class ObsidianIngestor(BaseIngestor):
         return chunks if chunks else [Document(
             content=converted or content,
             metadata=metadata,
-            source=source,
+            source_path=source,
             source_type=self.SOURCE_TYPE,
         )]
 
@@ -201,7 +206,7 @@ class ObsidianIngestor(BaseIngestor):
                         docs.append(Document(
                             content=f"{current_heading}\n\n{body}",
                             metadata={**base_metadata, "section": current_heading},
-                            source=source,
+                            source_path=source,
                             source_type=self.SOURCE_TYPE,
                         ))
                 current_heading = section
@@ -216,7 +221,7 @@ class ObsidianIngestor(BaseIngestor):
                 docs.append(Document(
                     content=f"{current_heading}\n\n{body}",
                     metadata={**base_metadata, "section": current_heading},
-                    source=source,
+                    source_path=source,
                     source_type=self.SOURCE_TYPE,
                 ))
 

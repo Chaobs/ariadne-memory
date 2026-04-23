@@ -1,59 +1,49 @@
 """
-Pytest configuration and shared fixtures for Ariadne test suite.
+Pytest fixtures for Ariadne Wiki module tests.
 
-Run with: python -m pytest tests/ -v
+Run Wiki tests with: python -m pytest tests/test_wiki_*.py -v
+Run all tests with:  python -m pytest tests/ -v
+
+Fixtures provided:
+  - wiki_project       : WikiProject instance in a temp directory (isolated)
+  - wiki_project_fs    : Same as wiki_project, but directory structure is actually created on disk
+  - sample_source_md   : A markdown source file inside wiki_project's raw/sources/
+  - sample_source_txt   : A plain text source file inside wiki_project's raw/sources/
+  - mock_llm           : Patch that replaces the LLM factory with a no-op mock
+  - mock_llm_response  : Fixture that returns a configurable mock response
 """
 
-import pytest
-import tempfile
-import shutil
 import os
 import sys
+import shutil
+import tempfile
+import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+# Ensure vendor packages are on path for tests that import ariadne
+VENDOR_INIT = Path(__file__).parent.parent / "vendor" / "__init__.py"
+if VENDOR_INIT.exists() and str(VENDOR_INIT.parent.parent) not in sys.path:
+    sys.path.insert(0, str(VENDOR_INIT.parent.parent))
 
-# Ensure vendor packages are on path
-_vendor_init = Path(__file__).parent.parent / "vendor" / "__init__.py"
-if _vendor_init.exists() and str(_vendor_init.parent.parent) not in sys.path:
-    sys.path.insert(0, str(_vendor_init.parent.parent))
-
-try:
-    import vendor  # noqa: F401 - initializes sys.path and env vars
-except Exception:
-    pass
+# Initialize vendor (sets up sys.path and env vars)
+import vendor
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Core fixtures
+# Temp directory fixtures
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.fixture
-def temp_dir():
-    """Provide a temporary directory that is cleaned up after the test."""
-    tmp = tempfile.mkdtemp()
+def wiki_temp_dir():
+    """Provide an isolated temp directory that is cleaned up after the test."""
+    tmp = tempfile.mkdtemp(prefix="ariadne_wiki_test_")
     yield Path(tmp)
     shutil.rmtree(tmp, ignore_errors=True)
 
 
-@pytest.fixture
-def sample_markdown(temp_dir):
-    """Create a sample markdown file for testing."""
-    path = temp_dir / "test.md"
-    path.write_text("# Test Document\n\nThis is a test.\n", encoding="utf-8")
-    return path
-
-
-@pytest.fixture
-def sample_text(temp_dir):
-    """Create a sample text file for testing."""
-    path = temp_dir / "test.txt"
-    path.write_text("Hello, world!\n", encoding="utf-8")
-    return path
-
-
 # ─────────────────────────────────────────────────────────────────────────────
-# Wiki fixtures
+# WikiProject fixtures
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.fixture
@@ -67,17 +57,10 @@ def wiki_project(wiki_temp_dir):
 
 
 @pytest.fixture
-def wiki_temp_dir():
-    """Provide an isolated temp directory that is cleaned up after the test."""
-    tmp = tempfile.mkdtemp(prefix="ariadne_wiki_test_")
-    yield Path(tmp)
-    shutil.rmtree(tmp, ignore_errors=True)
-
-
-@pytest.fixture
 def wiki_project_fs(wiki_project):
     """
     Create the full wiki directory structure on disk and return the WikiProject.
+    Use this fixture when testing filesystem operations (read/write/list).
     """
     os.makedirs(wiki_project.raw_dir, exist_ok=True)
     os.makedirs(wiki_project.sources_dir, exist_ok=True)
@@ -90,20 +73,23 @@ def wiki_project_fs(wiki_project):
     os.makedirs(wiki_project.comparisons_dir, exist_ok=True)
 
     # Write placeholder schema / purpose files
-    Path(wiki_project.schema_path).write_text(
-        "# Schema\n\nRules for this wiki.\n", encoding="utf-8"
-    )
-    Path(wiki_project.purpose_path).write_text(
-        "# Purpose\n\nPurpose of this wiki.\n", encoding="utf-8"
-    )
+    schema_path = wiki_project.schema_path
+    purpose_path = wiki_project.purpose_path
+    Path(schema_path).write_text("# Schema\n\nRules for this wiki.\n", encoding="utf-8")
+    Path(purpose_path).write_text("# Purpose\n\nPurpose of this wiki.\n", encoding="utf-8")
+
+    # Write index.md
     Path(wiki_project.index_path).write_text(
-        "# Index\n\n---\ntype: index\n---\n\n", encoding="utf-8"
+        "# Index\n\n---\ntype: index\n---\n\n",
+        encoding="utf-8",
     )
-    Path(wiki_project.log_path).write_text(
-        "# Wiki Log\n\nThis is a chronological record of wiki operations.\n", encoding="utf-8"
-    )
+
     return wiki_project
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Source file fixtures
+# ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.fixture
 def sample_source_md(wiki_project_fs):
@@ -135,6 +121,10 @@ def sample_source_txt(wiki_project_fs):
     )
     return str(src_path)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Wiki page fixtures
+# ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.fixture
 def sample_wiki_page(wiki_project_fs):
@@ -168,7 +158,7 @@ def sample_wiki_pages(wiki_project_fs):
     """
     pages = {}
 
-    # Entity linked to concept
+    # Entity
     entity_path = Path(wiki_project_fs.entities_dir) / "agent.md"
     entity_path.write_text(
         "---\ntype: entity\ntitle: \"Agent\"\ncreated: 2025-01-01\nupdated: 2025-01-01\ntags: [ai, agent]\nrelated: [concepts/memory]\nsources: []\n---\n\n"
@@ -179,7 +169,7 @@ def sample_wiki_pages(wiki_project_fs):
     )
     pages["entity"] = str(entity_path)
 
-    # Concept linked from entity
+    # Concept
     concept_path = Path(wiki_project_fs.concepts_dir) / "memory.md"
     concept_path.write_text(
         "---\ntype: concept\ntitle: \"Memory\"\ncreated: 2025-01-01\nupdated: 2025-01-01\ntags: [memory, ai]\nrelated: [entities/agent]\nsources: []\n---\n\n"
@@ -190,7 +180,7 @@ def sample_wiki_pages(wiki_project_fs):
     )
     pages["concept"] = str(concept_path)
 
-    # Orphan page (no connections)
+    # Orphan page (no links to/from other pages)
     orphan_path = Path(wiki_project_fs.concepts_dir) / "orphan.md"
     orphan_path.write_text(
         "---\ntype: concept\ntitle: \"Orphan\"\ncreated: 2025-01-01\nupdated: 2025-01-01\ntags: []\nrelated: []\nsources: []\n---\n\n"
@@ -200,7 +190,7 @@ def sample_wiki_pages(wiki_project_fs):
     )
     pages["orphan"] = str(orphan_path)
 
-    # Page with broken link
+    # Page with broken link (links to non-existent page)
     broken_path = Path(wiki_project_fs.concepts_dir) / "broken-link-page.md"
     broken_path.write_text(
         "---\ntype: concept\ntitle: \"Broken Link\"\ncreated: 2025-01-01\nupdated: 2025-01-01\ntags: []\nrelated: []\nsources: []\n---\n\n"
@@ -222,6 +212,7 @@ def mock_llm():
     """
     Patch _get_llm in ariadne.wiki.ingestor so it returns a mock LLM.
     The mock's chat() method returns a response with empty content.
+    Use mock_llm_response for more control.
     """
     mock_response = MagicMock()
     mock_response.content = ""

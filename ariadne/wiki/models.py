@@ -79,13 +79,13 @@ class WikiFrontmatter:
             return fm
 
         # Find closing ---
-        end_match = re.search(r'\n---\n', text[3:])
+        end_match = re.search(r'\n---\n?', text[3:])
         if not end_match:
             return fm
 
         body = text[3:end_match.start() + 3]
 
-        # Parse type
+        # Parse type — accept both "type: value" and "type:value"
         m = re.search(r'^type:\s*(\S+)', body, re.MULTILINE)
         if m:
             try:
@@ -93,7 +93,7 @@ class WikiFrontmatter:
             except ValueError:
                 pass
 
-        # Parse title
+        # Parse title — accept quoted or unquoted, with or without space after colon
         m = re.search(r'^title:\s*["\']?(.+?)["\']?\s*$', body, re.MULTILINE)
         if m:
             fm.title = m.group(1)
