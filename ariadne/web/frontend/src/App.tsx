@@ -12,6 +12,7 @@ import Ingest from './pages/Ingest';
 import Summarize from './pages/Summarize';
 import Graph from './pages/Graph';
 import Settings from './pages/Settings';
+import Wiki from './pages/Wiki';
 import { initI18n } from './i18n';
 
 // Initialize i18n at app startup
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="memory" element={<Memory />} />
           <Route path="ingest" element={<Ingest />} />
           <Route path="summarize" element={<Summarize />} />
+          <Route path="wiki" element={<Wiki />} />
           <Route path="graph" element={<Graph />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />

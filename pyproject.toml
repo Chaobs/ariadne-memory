@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ariadne-memory"
-version = "0.6.0"
+version = "0.6.3"
 description = "Cross-source AI memory and knowledge weaving system"
 readme = "README.md"
 license = "MIT"

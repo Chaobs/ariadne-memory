@@ -7,7 +7,7 @@ import { Outlet, NavLink } from 'react-router-dom';
 import { setLocale, LOCALES, t, type Locale } from '../i18n';
 import { configApi } from '../api/ariadne';
 
-const VERSION = 'v0.6.2';
+const VERSION = 'v0.6.3';
 
 // Flag image map — PNG files in /assets/flags/, 24x24px
 const FLAG_MAP: Record<string, string> = {
@@ -27,6 +27,7 @@ const navItems = [
   { path: '/memory', label: 'nav.memory', icon: '💾' },
   { path: '/ingest', label: 'nav.ingest', icon: '📥' },
   { path: '/summarize', label: 'nav.summarize', icon: '📝' },
+  { path: '/wiki', label: 'nav.wiki', icon: '📖' },
   { path: '/graph', label: 'nav.graph', icon: '🕸️' },
   { path: '/settings', label: 'nav.settings', icon: '⚙️' },
 ];

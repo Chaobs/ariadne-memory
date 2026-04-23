@@ -1304,6 +1304,26 @@ class DocumentInfoTool(MCPTool):
 # Wiki Tools (LLM Wiki — Karpathy pattern)
 # ============================================================================
 
+def _wiki_get_project(project_dir: Optional[str]) -> "WikiProject":
+    """Resolve a WikiProject from a project_dir string."""
+    import os
+    from ariadne.paths import ARIADNE_DIR
+    from ariadne.wiki.models import WikiProject
+
+    if project_dir:
+        return WikiProject(root_path=os.path.abspath(project_dir))
+
+    # Default to <ariadne_dir>/wiki/
+    wiki_root = os.path.join(str(ARIADNE_DIR), "wiki")
+    return WikiProject(root_path=wiki_root)
+
+
+def _wiki_project_exists(proj: "WikiProject") -> bool:
+    """Check if a wiki project directory structure exists."""
+    import os
+    return os.path.isdir(proj.wiki_dir)
+
+
 @dataclass
 class WikiIngestTool(MCPTool):
     """Ingest a source file into the LLM Wiki."""
@@ -1326,12 +1346,17 @@ class WikiIngestTool(MCPTool):
                     },
                     "project_dir": {
                         "type": "string",
-                        "description": "Wiki project root directory (default: '<data_dir>/wiki')",
+                        "description": "Wiki project root directory (default: '<ariadne_dir>/wiki')",
                     },
-                    "force": {
+                    "skip_cache": {
                         "type": "boolean",
                         "description": "Force re-ingest even if cache hit (default: False)",
                         "default": False,
+                    },
+                    "language": {
+                        "type": "string",
+                        "description": "Output language for generated wiki pages (e.g. 'Chinese', 'English')",
+                        "default": "",
                     },
                     "llm_config": {
                         "type": "object",
@@ -1345,41 +1370,39 @@ class WikiIngestTool(MCPTool):
     def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         source = arguments["source"]
         project_dir = arguments.get("project_dir")
-        force = arguments.get("force", False)
+        skip_cache = arguments.get("skip_cache", False)
+        language = arguments.get("language", "")
         llm_config = arguments.get("llm_config")
 
         try:
             from ariadne.wiki import (
-                WikiProject, ingest_source, batch_ingest, init_wiki_project,
+                WikiProject, ingest_source, init_wiki_project,
             )
 
-            # Resolve project directory
-            if project_dir:
-                proj = WikiProject(wiki_dir=project_dir)
-            else:
-                # Use default project in data_dir
-                from ariadne.config import ConfigManager
-                data_dir = ConfigManager.load_default_data_dir()
-                proj = WikiProject(wiki_dir=str(data_dir / "wiki"))
+            proj = _wiki_get_project(project_dir)
 
             # Ensure wiki project exists
-            if not proj.wiki_dir_exists:
-                init_wiki_project(proj)
+            if not _wiki_project_exists(proj):
+                init_wiki_project(proj.root_path)
 
-            # Run ingest
+            # Run ingest (note: source_path, not source)
             result = ingest_source(
-                source=source,
                 project=proj,
-                force=force,
+                source_path=source,
+                skip_cache=skip_cache,
+                language=language or "",
                 llm_config=llm_config,
             )
+
             return {
                 "source": source,
-                "project_dir": proj.wiki_dir,
-                "pages_created": result.pages_created,
-                "reviews": [r.to_dict() if hasattr(r, "to_dict") else r for r in result.reviews],
+                "project_dir": proj.root_path,
+                "wiki_dir": proj.wiki_dir,
+                "pages_written": result.pages_written,
+                "pages_count": len(result.pages_written),
+                "review_items": result.review_items,
                 "cached": result.cached,
-                "log_entry": result.log_entry,
+                "warnings": result.warnings,
             }
         except ImportError as e:
             return {"error": f"Wiki module not available: {e}"}
@@ -1409,12 +1432,17 @@ class WikiQueryTool(MCPTool):
                     },
                     "project_dir": {
                         "type": "string",
-                        "description": "Wiki project root directory (default: '<data_dir>/wiki')",
+                        "description": "Wiki project root directory (default: '<ariadne_dir>/wiki')",
                     },
                     "save_to_wiki": {
                         "type": "boolean",
                         "description": "Save the answer as a wiki query page (default: False)",
                         "default": False,
+                    },
+                    "language": {
+                        "type": "string",
+                        "description": "Output language (default: auto)",
+                        "default": "",
                     },
                     "llm_config": {
                         "type": "object",
@@ -1429,34 +1457,31 @@ class WikiQueryTool(MCPTool):
         question = arguments["question"]
         project_dir = arguments.get("project_dir")
         save_to_wiki = arguments.get("save_to_wiki", False)
+        language = arguments.get("language", "")
         llm_config = arguments.get("llm_config")
 
         try:
             from ariadne.wiki import WikiProject, query_wiki
 
-            # Resolve project directory
-            if project_dir:
-                proj = WikiProject(wiki_dir=project_dir)
-            else:
-                from ariadne.config import ConfigManager
-                data_dir = ConfigManager.load_default_data_dir()
-                proj = WikiProject(wiki_dir=str(data_dir / "wiki"))
+            proj = _wiki_get_project(project_dir)
 
-            if not proj.wiki_dir_exists:
+            if not _wiki_project_exists(proj):
                 return {"error": f"Wiki project not found: {proj.wiki_dir}"}
 
             result = query_wiki(
-                question=question,
                 project=proj,
+                question=question,
                 save_to_wiki=save_to_wiki,
+                language=language or "",
                 llm_config=llm_config,
             )
+
             return {
                 "question": question,
                 "answer": result.answer,
-                "pages_used": result.pages_used,
-                "citations": result.citations,
-                "query_slug": result.query_slug if hasattr(result, "query_slug") else None,
+                "cited_pages": result.cited_pages,
+                "cited_count": len(result.cited_pages),
+                "saved_to": result.saved_to,
             }
         except ImportError as e:
             return {"error": f"Wiki module not available: {e}"}
@@ -1483,13 +1508,18 @@ class WikiLintTool(MCPTool):
                 "properties": {
                     "project_dir": {
                         "type": "string",
-                        "description": "Wiki project root directory (default: '<data_dir>/wiki')",
+                        "description": "Wiki project root directory (default: '<ariadne_dir>/wiki')",
                     },
                     "mode": {
                         "type": "string",
                         "description": "Lint mode: 'structural', 'semantic', or 'full' (default: 'full')",
                         "default": "full",
                         "enum": ["structural", "semantic", "full"],
+                    },
+                    "language": {
+                        "type": "string",
+                        "description": "Output language for semantic lint (default: auto)",
+                        "default": "",
                     },
                     "llm_config": {
                         "type": "object",
@@ -1502,40 +1532,42 @@ class WikiLintTool(MCPTool):
     def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         project_dir = arguments.get("project_dir")
         mode = arguments.get("mode", "full")
+        language = arguments.get("language", "")
         llm_config = arguments.get("llm_config")
 
         try:
-            from ariadne.wiki import WikiProject, run_full_lint, run_structural_lint, run_semantic_lint
+            from ariadne.wiki import (
+                WikiProject, run_full_lint, run_structural_lint, run_semantic_lint,
+            )
 
-            # Resolve project directory
-            if project_dir:
-                proj = WikiProject(wiki_dir=project_dir)
-            else:
-                from ariadne.config import ConfigManager
-                data_dir = ConfigManager.load_default_data_dir()
-                proj = WikiProject(wiki_dir=str(data_dir / "wiki"))
+            proj = _wiki_get_project(project_dir)
 
-            if not proj.wiki_dir_exists:
+            if not _wiki_project_exists(proj):
                 return {"error": f"Wiki project not found: {proj.wiki_dir}"}
 
             if mode == "structural":
                 issues = run_structural_lint(proj)
             elif mode == "semantic":
-                issues = run_semantic_lint(proj, llm_config=llm_config)
+                issues = run_semantic_lint(
+                    proj, llm_config=llm_config, language=language or "",
+                )
             else:
-                issues = run_full_lint(proj, llm_config=llm_config)
+                issues = run_full_lint(
+                    proj, llm_config=llm_config, language=language or "",
+                )
 
             return {
                 "mode": mode,
-                "project_dir": proj.wiki_dir,
+                "project_dir": proj.root_path,
+                "wiki_dir": proj.wiki_dir,
                 "total_issues": len(issues),
                 "issues": [
                     {
                         "type": i.issue_type.value,
                         "severity": i.severity.value,
-                        "page": i.page_path,
-                        "message": i.message,
-                        "details": i.details,
+                        "page": i.page,
+                        "detail": i.detail,
+                        "affected_pages": i.affected_pages,
                     }
                     for i in issues
                 ],
@@ -1560,7 +1592,7 @@ class WikiListTool(MCPTool):
                 "properties": {
                     "project_dir": {
                         "type": "string",
-                        "description": "Wiki project root directory (default: '<data_dir>/wiki')",
+                        "description": "Wiki project root directory (default: '<ariadne_dir>/wiki')",
                     },
                     "page_type": {
                         "type": "string",
@@ -1582,15 +1614,9 @@ class WikiListTool(MCPTool):
         try:
             from ariadne.wiki import WikiProject, list_wiki_pages, read_wiki_page
 
-            # Resolve project directory
-            if project_dir:
-                proj = WikiProject(wiki_dir=project_dir)
-            else:
-                from ariadne.config import ConfigManager
-                data_dir = ConfigManager.load_default_data_dir()
-                proj = WikiProject(wiki_dir=str(data_dir / "wiki"))
+            proj = _wiki_get_project(project_dir)
 
-            if not proj.wiki_dir_exists:
+            if not _wiki_project_exists(proj):
                 return {"error": f"Wiki project not found: {proj.wiki_dir}"}
 
             pages = list_wiki_pages(proj.wiki_dir)
@@ -1622,7 +1648,8 @@ class WikiListTool(MCPTool):
                 })
 
             return {
-                "project_dir": proj.wiki_dir,
+                "project_dir": proj.root_path,
+                "wiki_dir": proj.wiki_dir,
                 "total_pages": len(results),
                 "pages": results,
             }

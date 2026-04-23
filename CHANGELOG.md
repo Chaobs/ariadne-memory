@@ -5,6 +5,47 @@ All notable changes to Ariadne will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-04-23
+
+### Added
+
+#### LLM Wiki — Web UI Integration
+- **Wiki Page** (`ariadne/web/frontend/src/pages/Wiki.tsx`) — Complete Web UI tab with 6 sub-tabs:
+  - **Overview** — Project stats, initialization form, overview content
+  - **Ingest** — Source file ingestion with two-step CoT pipeline (file path, language selector, progress indicator)
+  - **Query** — Natural language Q&A with wiki citation, optional save-to-wiki
+  - **Lint** — Structural + semantic health check (orphan pages, broken links, cross-reference analysis)
+  - **Pages** — Browsable page list with type-colored badges, content preview panel
+  - **Log** — Operation log viewer
+- **Wiki API Client** (`ariadne/web/frontend/src/api/ariadne.ts`) — TypeScript interfaces and fetch wrappers for all 11 Wiki API endpoints
+- **Wiki i18n** (`ariadne/web/frontend/src/i18n.ts`) — Full 8-language translations for all Wiki UI strings
+- **Wiki Navigation** (`ariadne/web/frontend/src/components/Layout.tsx`) — Sidebar nav item with 📖 icon
+- **Wiki Routes** (`ariadne/web/frontend/src/App.tsx`) — `/wiki` route registered with React Router
+- **Wiki MCP Refactoring** (`ariadne/mcp/tools.py`) — Refactored WikiIngest/List/Lint tools with helper functions, language parameter, WikiProject compatibility fixes
+
+#### Pytest Test Suite (115 tests)
+- **`test_wiki_models.py`** — 26 tests: WikiPage, WikiProject, YAML frontmatter (with/without trailing newline), slug generation, to_yaml/from_yaml roundtrip, validation
+- **`test_wiki_builder.py`** — 43 tests: file I/O (create/overwrite/append), block parsing (---FILE: / ---END FILE---), LLM output parsing, SHA256 caching, incremental ingestion, index/overview generation
+- **`test_wiki_linter.py`** — 35 tests: structural lint (orphan pages, broken links, no-outlinks) with mock LLM, semantic lint with mock LLM (CoT scoring, entity/concept validation)
+- **`test_wiki_ingestor.py`** — 4 tests: two-step CoT pipeline, source truncation (60KB limit)
+- **`test_wiki_obsidian.py`** — 7 tests: Obsidian vault import, wikilink/concealedTag/highlight/blockquote/tag conversions
+- **`tests/conftest.py`** — Wiki fixtures: `sample_wiki_project`, `sample_wiki_pages`, `mock_llm_responses`, `project_path`
+- **`tests/conftest_wiki.py`** — Wiki-specific fixtures and utilities
+
+#### Documentation
+- **`docs/FEATURE_DEPENDENCIES.md`** — Feature dependency guide with 3-tier architecture (online/LLM/local), 10 module dependency tables, scenario-based usage guide, quick reference matrix, API key security best practices
+- **README** — Added pytest test badge, Testing section (5 suites), `FEATURE_DEPENDENCIES.md` to docs list, fixed duplicate `plugins/` directory entry in Architecture tree
+
+### Changed
+
+- **`pyproject.toml`** — Added pytest `[tool.pytest.ini_options]` configuration with `testpaths`, `python_files`, `python_classes`, `python_functions`, `asyncio_mode`, `filterwarnings`, `timeout`
+- **`ariadne/wiki/models.py`** — Fixed YAML frontmatter regex to handle files without trailing newline (`r'\n---\n'` → `r'\n---\n|\n---\r\n|\n---$'`)
+- **`ariadne/wiki/builder.py`** — Fixed `parse_file_blocks` infinite loop (JavaScript `list.length` → Python `len(lines)`); Fixed `read_wiki_page` body extraction regex (`r'\n---\n'` instead of `r'\n---\r\n'`)
+- **`ariadne/wiki/obsidian.py`** — Made `_extract` abstract method concrete with default implementation; Fixed `Document(analysis=...)` parameter name
+- **`tests/test_wiki_ingestor.py`** — Removed duplicate `import pathlib` that shadowed module-level import and caused `UnboundLocalError`
+- **README.md** — Removed duplicate `plugins/` directory block in Architecture tree; Updated GitHub release line from v0.6.2 to v0.6.3
+- **README_CN.md** — Updated GitHub release line from v0.6.2 to v0.6.3
+
 ## [0.7.0] - 2026-04-22
 
 ### Added

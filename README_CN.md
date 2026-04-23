@@ -5,6 +5,8 @@
 
 **Ariadne** 是一个跨源 AI 记忆与知识织入系统，将来自不同来源的文档、对话、代码统一摄入，构建可检索的知识网络。
 
+**特色功能：** 多源摄入 + RAG + 知识图谱 + 记忆持久化 + AI 增强 (MCP/Agent/Skill) + LLM Wiki
+
 **[English Version](README.md)** | 中文版
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -556,7 +558,7 @@ Ariadne 支持多种 AI Agent 集成：
 - [x] .gitignore 更新（config.json / .ariadne 不推送）
 
 ### 第六阶段 社区运营与迭代（持续）
-- [x] GitHub 正式发布 v0.2.0 → v0.6.2
+- [x] GitHub 正式发布 v0.2.0 → v0.6.3
 - [x] **Web UI（FastAPI + React）** — 现代跨平台界面，替代旧版 Tkinter
 - [x] **实时摄入进度** — SSE 实时上传进度
 - [x] **精美图谱可视化** — D3.js 交互式知识图谱增强（筛选、高亮、导出）

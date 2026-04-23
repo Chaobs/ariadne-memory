@@ -379,3 +379,154 @@ export const systemApi = {
       body: JSON.stringify({ query, memory, output_lang: outputLang }),
     }),
 };
+
+// Wiki API (LLM Wiki — Karpathy pattern)
+export interface WikiPage {
+  path: string;
+  type: string;
+  title: string;
+  tags: string[];
+  updated: string;
+  sources: string[];
+}
+
+export interface WikiIngestResult {
+  ok: boolean;
+  source_file: string;
+  pages_written: string[];
+  pages_count: number;
+  review_items: Array<{
+    type: string;
+    title: string;
+    description: string;
+    source_path: string;
+    affected_pages: string[];
+    options: string[];
+  }>;
+  warnings: string[];
+  cached: boolean;
+}
+
+export interface WikiQueryResult {
+  ok: boolean;
+  question: string;
+  answer: string;
+  cited_pages: string[];
+  cited_count: number;
+  saved_to: string | null;
+}
+
+export interface WikiLintResult {
+  ok: boolean;
+  issues: Array<{
+    type: string;
+    severity: string;
+    page: string;
+    detail: string;
+    affected_pages: string[];
+  }>;
+  total: number;
+  warnings: number;
+}
+
+export const wikiApi = {
+  /** Initialize a new wiki project */
+  init: (projectPath: string, name?: string, schemaContent?: string, purposeContent?: string) =>
+    fetchJSON(`${API_BASE}/wiki/init`, {
+      method: 'POST',
+      body: JSON.stringify({
+        project_path: projectPath,
+        name: name ?? '',
+        schema_content: schemaContent ?? '',
+        purpose_content: purposeContent ?? '',
+      }),
+    }),
+
+  /** Ingest a source file into the wiki */
+  ingest: (sourcePath: string, projectPath = '.', language = '', skipCache = false) =>
+    fetchJSON<WikiIngestResult>(`${API_BASE}/wiki/ingest`, {
+      method: 'POST',
+      body: JSON.stringify({
+        source_path: sourcePath,
+        project_path: projectPath,
+        language,
+        skip_cache: skipCache,
+      }),
+    }),
+
+  /** Import an Obsidian vault */
+  ingestVault: (vaultPath: string, projectPath = '.', language = '', ingestImmediately = false) =>
+    fetchJSON(`${API_BASE}/wiki/ingest-vault`, {
+      method: 'POST',
+      body: JSON.stringify({
+        vault_path: vaultPath,
+        project_path: projectPath,
+        language,
+        ingest_immediately: ingestImmediately,
+      }),
+    }),
+
+  /** Query the wiki with a natural language question */
+  query: (question: string, projectPath = '.', language = '', saveToWiki = false) =>
+    fetchJSON<WikiQueryResult>(`${API_BASE}/wiki/query`, {
+      method: 'POST',
+      body: JSON.stringify({
+        question,
+        project_path: projectPath,
+        language,
+        save_to_wiki: saveToWiki,
+      }),
+    }),
+
+  /** Run lint checks on the wiki */
+  lint: (projectPath = '.', structuralOnly = false, language = '') =>
+    fetchJSON<WikiLintResult>(`${API_BASE}/wiki/lint`, {
+      method: 'POST',
+      body: JSON.stringify({
+        project_path: projectPath,
+        structural_only: structuralOnly,
+        language,
+      }),
+    }),
+
+  /** List all wiki pages */
+  pages: (projectPath = '.') =>
+    fetchJSON<{ ok: boolean; pages: WikiPage[]; total: number }>(
+      `${API_BASE}/wiki/pages?project_path=${encodeURIComponent(projectPath)}`
+    ),
+
+  /** Get a single wiki page content */
+  page: (relativePath: string, projectPath = '.') =>
+    fetchJSON<{ ok: boolean; path: string; content: string }>(
+      `${API_BASE}/wiki/page?project_path=${encodeURIComponent(projectPath)}&relative_path=${encodeURIComponent(relativePath)}`
+    ),
+
+  /** Get wiki operation log */
+  log: (projectPath = '.') =>
+    fetchJSON<{ ok: boolean; content: string }>(
+      `${API_BASE}/wiki/log?project_path=${encodeURIComponent(projectPath)}`
+    ),
+
+  /** Get wiki index */
+  index: (projectPath = '.') =>
+    fetchJSON<{ ok: boolean; content: string }>(
+      `${API_BASE}/wiki/index?project_path=${encodeURIComponent(projectPath)}`
+    ),
+
+  /** Get wiki overview */
+  overview: (projectPath = '.') =>
+    fetchJSON<{ ok: boolean; content: string }>(
+      `${API_BASE}/wiki/overview?project_path=${encodeURIComponent(projectPath)}`
+    ),
+
+  /** List recent wiki projects */
+  projects: () =>
+    fetchJSON<{ ok: boolean; projects: string[] }>(`${API_BASE}/wiki/projects`),
+
+  /** Save a project path to recent list */
+  saveProject: (projectPath: string) =>
+    fetchJSON(`${API_BASE}/wiki/projects/save`, {
+      method: 'POST',
+      body: JSON.stringify({ project_path: projectPath }),
+    }),
+};

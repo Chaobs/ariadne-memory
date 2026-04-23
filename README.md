@@ -5,6 +5,8 @@
 
 **Ariadne** is a cross-source AI memory and knowledge weaving system that ingests documents, conversations, and code from various sources into a searchable knowledge network.
 
+**Feature:** Multi-source Ingestion + RAG + Knowledge Graph + Persistent Memory + AI Enhancement (MCP/Agent/Skill) + LLM Wiki
+
 **[中文版](README_CN.md)** | English Version
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
