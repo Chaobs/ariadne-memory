@@ -19,6 +19,7 @@
 - [快速开始 / Quick Start](#快速开始--quick-start)
 - [CLI 使用指南 / CLI Usage](#cli-使用指南--cli-usage)
 - [架构设计 / Architecture](#架构设计--architecture)
+- [LLM Wiki / LLM Wiki](#llm-wiki--llm-wiki)
 - [Agent 集成 / Agent Integration](#agent-集成--agent-integration)
 - [开发路线 / Roadmap](#开发路线--roadmap)
 - [项目致谢 / Credits](#项目致谢--credits)
@@ -55,6 +56,7 @@
 | ⏱️ **延迟删除** | 标记-批量删除机制，避免 SQLite 锁争用 | ✅ |
 | 🔀 **RAG Pipeline** | 混合搜索(向量+BM25) + 重排序 + 引用生成 | ✅ |
 | 📌 **智能引用** | 自动生成带高亮的文档引用，支持多种格式输出 | ✅ |
+| 📖 **LLM Wiki** | Karpathy 风格持久化知识库，两步链式思考摄入、问答、整洁检查 | ✅ |
 
 ---
 
@@ -294,6 +296,14 @@ ariadne/
 │   ├── reranker.py         # 交叉编码器重排序
 │   ├── citation.py         # 引用生成器
 │   └── engine.py           # RAG 引擎
+├── wiki/                   # LLM Wiki（Karpathy 模式）
+│   ├── models.py          # WikiPage, WikiProject, LintResult 数据模型
+│   ├── prompts.py        # 两步链式思考提示词构建
+│   ├── builder.py        # 文件读写、块解析、增量缓存
+│   ├── ingestor.py       # 两步 CoT 摄入管道
+│   ├── linter.py         # 结构检查 + 语义检查
+│   ├── query.py          # Wiki 问答（带引用）
+│   └── obsidian.py       # Obsidian 笔记库导入
 ├── mcp/                    # MCP Server
 │   ├── server.py           # MCP Server 核心实现（stdio / HTTP）
 │   ├── tools.py            # MCP Tools（4个工具）
@@ -313,6 +323,7 @@ ariadne/
 docs/                       # 文档目录
 ├── AGENT_INTEGRATION.md   # Agent 集成指南（Claude Code, Cursor, WorkBuddy）
 ├── MCP.md                 # MCP Server 文档
+├── LLM_WIKI.md            # LLM Wiki 功能指南（Karpathy 模式）
 ├── Ariadne-Memory-SKILL.md    # Agent Skill 定义文件（Claude Code, Cursor 等）
 ├── TEST_AND_EXTENSION_PLAN.md
 ├── AutoSave.md
@@ -338,6 +349,83 @@ vendor/                     # 第三方库本地化
 ├── models/                 # 本地模型缓存（all-MiniLM-L6-v2）
 └── cache/                  # 运行时缓存（Chroma ONNX 等）
 ```
+
+---
+
+## LLM Wiki / LLM Wiki
+
+基于 [Karpathy 的 LLM Wiki 模式](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)，Ariadne 提供了一个持久化、可查询的知识库，从源文档中有机生长。
+
+### 架构 / Architecture
+
+```
+原始资料（不可变）→ Wiki（LLM 生成）→ Schema（规则配置）
+```
+
+### 三个核心操作 / Three Core Operations
+
+| 操作 | 命令 | 说明 |
+|------|------|------|
+| **摄入 / Ingest** | `ariadne wiki ingest <文件>` | 两步 CoT：分析源文档 → 生成 Wiki 页面 |
+| **问答 / Query** | `ariadne wiki query <问题>` | 搜索 Wiki → LLM 综合回答，带引用 |
+| **检查 / Lint** | `ariadne wiki lint` | 结构检查（孤立页面/断链）+ 语义检查（LLM） |
+
+### 目录结构 / Directory Structure
+
+```
+my-wiki/
+├── raw/
+│   ├── sources/       ← 放置源文档
+│   └── assets/       ← 图片和附件
+├── wiki/
+│   ├── index.md      ← 自动生成的主题索引
+│   ├── log.md        ← 摄入操作日志
+│   ├── overview.md   ← Wiki 总览
+│   ├── content/      ← 概念/实体页面
+│   └── queries/      ← 存档的问答会话
+├── schema.md         ← Wiki 结构规则
+└── purpose.md       ← Wiki 目标和宗旨
+```
+
+### CLI 快速开始 / CLI Quick Start
+
+```bash
+# 初始化 Wiki 项目
+ariadne wiki init my-wiki
+
+# 摄入源文件（两步 CoT）
+ariadne wiki ingest raw/papers/ml-survey.pdf -p my-wiki
+
+# 提问
+ariadne wiki query "主要发现是什么？" -p my-wiki
+
+# 健康检查
+ariadne wiki lint -p my-wiki
+
+# 列出所有页面
+ariadne wiki list -p my-wiki
+```
+
+### Obsidian 导入 / Obsidian Import
+
+导入整个 Obsidian 笔记库，自动转换语法：
+
+```bash
+ariadne wiki ingest-vault /path/to/obsidian/vault -p my-wiki
+```
+
+自动转换：`[[wikilink]]` → markdown 链接，`==高亮==` → `**粗体**`，保留 frontmatter 和 `#标签`。
+
+### MCP 工具 / MCP Tools
+
+| 工具 | 说明 |
+|------|------|
+| `ariadne_wiki_ingest` | 两步 CoT 摄入源文档 |
+| `ariadne_wiki_query` | Wiki 知识库问答，LLM 综合 |
+| `ariadne_wiki_lint` | 结构 + 语义健康检查 |
+| `ariadne_wiki_list` | 按类型/标签列出页面 |
+
+详细文档见 [docs/LLM_WIKI.md](docs/LLM_WIKI.md)。
 
 ---
 

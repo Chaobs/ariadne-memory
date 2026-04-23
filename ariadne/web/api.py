@@ -200,6 +200,13 @@ def create_app() -> FastAPI:
     app.include_router(config_router, prefix="/api/config", tags=["Config"])
     app.include_router(system_router, prefix="/api/system", tags=["System"])
 
+    # Register Wiki router (LLM Wiki feature)
+    try:
+        from ariadne.web.wiki_api import router as wiki_router
+        app.include_router(wiki_router, prefix="/api/wiki", tags=["Wiki"])
+    except ImportError:
+        pass  # Wiki module not available
+
     # Register extension routers (CLI feature parity)
     from ariadne.web.api_extensions import register_extension_routers
     register_extension_routers(app)

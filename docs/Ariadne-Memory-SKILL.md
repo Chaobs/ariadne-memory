@@ -2,7 +2,7 @@
 name: ariadne-memory
 description: |
   Ariadne Memory System - 跨源AI记忆与知识织入系统。
-  提供语义搜索、RAG混合检索、知识图谱、LLM摘要等功能。
+  提供语义搜索、RAG混合检索、知识图谱、LLM摘要、LLM Wiki等功能。
 
   触发词（任一即可）：
   - 记忆、记忆库、搜索记忆
@@ -10,6 +10,8 @@ description: |
   - RAG、混合搜索、向量搜索
   - 知识图谱、实体关系
   - 摄入文档、添加记忆
+  - LLM Wiki、知识Wiki、Wiki摄入、Wiki问答、Wiki检查
+  - Obsidian导入、Obsidian笔记
 
 triggers:
   # 搜索相关
@@ -42,6 +44,17 @@ triggers:
   - 总结
   - 分析
 
+  # LLM Wiki 相关
+  - LLM Wiki
+  - 知识Wiki
+  - Wiki摄入
+  - Wiki问答
+  - Wiki查询
+  - Wiki检查
+  - Wiki整理
+  - Obsidian导入
+  - Obsidian笔记
+
 category: memory
 version: 1.0.0
 author: Ariadne Team
@@ -61,6 +74,18 @@ api:
     ingest_files: /api/ingest/files
     config: /api/config
     system_stats: /api/system/stats
+    # LLM Wiki
+    wiki_init: /api/wiki/init
+    wiki_ingest: /api/wiki/ingest
+    wiki_ingest_vault: /api/wiki/ingest-vault
+    wiki_query: /api/wiki/query
+    wiki_lint: /api/wiki/lint
+    wiki_pages: /api/wiki/pages
+    wiki_page: /api/wiki/page
+    wiki_log: /api/wiki/log
+    wiki_index: /api/wiki/index
+    wiki_overview: /api/wiki/overview
+    wiki_projects: /api/wiki/projects
 ---
 
 # Ariadne Memory Skill
@@ -163,6 +188,66 @@ FormData: {
 
 支持 SSE 流式进度：`POST /api/ingest/files/stream`
 
+### 7. LLM Wiki（知识Wiki）
+
+基于 Karpathy LLM Wiki 模式的三层知识架构：
+
+```
+Raw Sources（原始资料） → Wiki（LLM生成） → Schema（规则配置）
+```
+
+**三个核心操作**：
+- **Ingest**：两步 Chain-of-Thought — 分析源文档 → 生成 Wiki 页面
+- **Query**：搜索 Wiki → LLM 综合回答 → 附带引用
+- **Lint**：结构检查 + 语义检查
+
+```
+# 初始化 Wiki 项目
+POST /api/wiki/init
+Body: { "project_dir": "/path/to/wiki" }
+
+# 摄入源文件
+POST /api/wiki/ingest
+Body: { "source": "/path/to/doc.pdf", "project_dir": "...", "force": false }
+
+# 导入 Obsidian 笔记库
+POST /api/wiki/ingest-vault
+Body: { "vault_path": "/path/to/vault", "project_dir": "..." }
+
+# Wiki 问答
+POST /api/wiki/query
+Body: { "question": "...", "project_dir": "...", "save_to_wiki": false }
+
+# Wiki 健康检查
+POST /api/wiki/lint
+Body: { "project_dir": "...", "mode": "full" }
+
+# 列出 Wiki 页面
+GET /api/wiki/pages?project_dir=...
+
+# 读取单个 Wiki 页面
+GET /api/wiki/page?path=concepts/transformer&project_dir=...
+
+# 读取日志
+GET /api/wiki/log?project_dir=...
+
+# 读取索引
+GET /api/wiki/index?project_dir=...
+```
+
+**Wiki 目录结构**：
+- `wiki/` — Wiki 页面（`index.md`、`log.md`、`overview.md`）
+- `wiki/content/` — 内容页面（概念、实体、比较等）
+- `wiki/queries/` — Q&A 存档
+- `raw/sources/` — 原始资料
+- `.ariadne-wiki-cache/` — 增量缓存
+
+**Obsidian 支持**：
+- 导入整个 Obsidian Vault
+- 转换 `[[wikilink]]` → Markdown 链接
+- 转换 `==highlight==` → `**bold**`
+- 保留 YAML frontmatter 和 `#tags`
+
 ## 记忆系统管理
 
 ### 创建记忆系统
@@ -214,6 +299,10 @@ ariadne mcp run -t http -p 8765
 | ariadne_stats | 统计信息 | 系统状态 |
 | ariadne_health_check | 健康检查 | 故障排查 |
 | ariadne_web_search | 网络搜索 | 补充实时信息 |
+| ariadne_wiki_ingest | Wiki摄入 | 两步CoT摄入源文档 |
+| ariadne_wiki_query | Wiki问答 | Wiki知识库QA |
+| ariadne_wiki_lint | Wiki检查 | 结构+语义健康检查 |
+| ariadne_wiki_list | Wiki列表 | 列出Wiki页面 |
 
 ## 使用示例
 

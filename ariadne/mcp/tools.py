@@ -414,6 +414,12 @@ class AriadneToolHandler:
         # Document Info Tool
         self._tools["ariadne_document_info"] = DocumentInfoTool(vector_store=self._vector_store)
 
+        # LLM Wiki Tools (Karpathy pattern)
+        self._tools["ariadne_wiki_ingest"] = WikiIngestTool()
+        self._tools["ariadne_wiki_query"] = WikiQueryTool()
+        self._tools["ariadne_wiki_lint"] = WikiLintTool()
+        self._tools["ariadne_wiki_list"] = WikiListTool()
+
     def register(self, name: str, tool: MCPTool):
         """Register a new tool."""
         self._tools[name] = tool
@@ -436,6 +442,7 @@ class AriadneToolHandler:
             "analytics": ["ariadne_stats", "ariadne_health_check", "ariadne_document_info"],
             "llm": ["ariadne_summarize"],
             "config": ["ariadne_config_get"],
+            "wiki": ["ariadne_wiki_ingest", "ariadne_wiki_query", "ariadne_wiki_lint", "ariadne_wiki_list"],
         }
         return categories
 
@@ -1291,3 +1298,337 @@ class DocumentInfoTool(MCPTool):
         except Exception as e:
             logger.error(f"Document info error: {e}")
             return {"error": str(e)}
+
+
+# ============================================================================
+# Wiki Tools (LLM Wiki — Karpathy pattern)
+# ============================================================================
+
+@dataclass
+class WikiIngestTool(MCPTool):
+    """Ingest a source file into the LLM Wiki."""
+
+    def __init__(self):
+        super().__init__(
+            name="ariadne_wiki_ingest",
+            description=(
+                "Ingest a source file or URL into the LLM Wiki using Karpathy's "
+                "two-step Chain-of-Thought pattern. Step 1: LLM analyzes the source "
+                "and produces a structured analysis. Step 2: LLM generates wiki pages. "
+                "Results are cached by source SHA256 to avoid re-processing unchanged files."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "source": {
+                        "type": "string",
+                        "description": "Path or URL of the source file to ingest into the wiki",
+                    },
+                    "project_dir": {
+                        "type": "string",
+                        "description": "Wiki project root directory (default: '<data_dir>/wiki')",
+                    },
+                    "force": {
+                        "type": "boolean",
+                        "description": "Force re-ingest even if cache hit (default: False)",
+                        "default": False,
+                    },
+                    "llm_config": {
+                        "type": "object",
+                        "description": "LLM provider config: {provider, model, api_key, base_url, max_tokens, temperature}",
+                    },
+                },
+                "required": ["source"],
+            },
+        )
+
+    def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        source = arguments["source"]
+        project_dir = arguments.get("project_dir")
+        force = arguments.get("force", False)
+        llm_config = arguments.get("llm_config")
+
+        try:
+            from ariadne.wiki import (
+                WikiProject, ingest_source, batch_ingest, init_wiki_project,
+            )
+
+            # Resolve project directory
+            if project_dir:
+                proj = WikiProject(wiki_dir=project_dir)
+            else:
+                # Use default project in data_dir
+                from ariadne.config import ConfigManager
+                data_dir = ConfigManager.load_default_data_dir()
+                proj = WikiProject(wiki_dir=str(data_dir / "wiki"))
+
+            # Ensure wiki project exists
+            if not proj.wiki_dir_exists:
+                init_wiki_project(proj)
+
+            # Run ingest
+            result = ingest_source(
+                source=source,
+                project=proj,
+                force=force,
+                llm_config=llm_config,
+            )
+            return {
+                "source": source,
+                "project_dir": proj.wiki_dir,
+                "pages_created": result.pages_created,
+                "reviews": [r.to_dict() if hasattr(r, "to_dict") else r for r in result.reviews],
+                "cached": result.cached,
+                "log_entry": result.log_entry,
+            }
+        except ImportError as e:
+            return {"error": f"Wiki module not available: {e}"}
+        except Exception as e:
+            logger.error(f"Wiki ingest error: {e}")
+            return {"error": str(e)}
+
+
+@dataclass
+class WikiQueryTool(MCPTool):
+    """Query the LLM Wiki with a natural language question."""
+
+    def __init__(self):
+        super().__init__(
+            name="ariadne_wiki_query",
+            description=(
+                "Ask the LLM Wiki a question. Searches relevant wiki pages, "
+                "passes them to an LLM for synthesis, and returns an answer "
+                "with citations. Optionally archives the Q&A back into the wiki."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "Natural language question to ask the wiki",
+                    },
+                    "project_dir": {
+                        "type": "string",
+                        "description": "Wiki project root directory (default: '<data_dir>/wiki')",
+                    },
+                    "save_to_wiki": {
+                        "type": "boolean",
+                        "description": "Save the answer as a wiki query page (default: False)",
+                        "default": False,
+                    },
+                    "llm_config": {
+                        "type": "object",
+                        "description": "LLM provider config: {provider, model, api_key, base_url}",
+                    },
+                },
+                "required": ["question"],
+            },
+        )
+
+    def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        question = arguments["question"]
+        project_dir = arguments.get("project_dir")
+        save_to_wiki = arguments.get("save_to_wiki", False)
+        llm_config = arguments.get("llm_config")
+
+        try:
+            from ariadne.wiki import WikiProject, query_wiki
+
+            # Resolve project directory
+            if project_dir:
+                proj = WikiProject(wiki_dir=project_dir)
+            else:
+                from ariadne.config import ConfigManager
+                data_dir = ConfigManager.load_default_data_dir()
+                proj = WikiProject(wiki_dir=str(data_dir / "wiki"))
+
+            if not proj.wiki_dir_exists:
+                return {"error": f"Wiki project not found: {proj.wiki_dir}"}
+
+            result = query_wiki(
+                question=question,
+                project=proj,
+                save_to_wiki=save_to_wiki,
+                llm_config=llm_config,
+            )
+            return {
+                "question": question,
+                "answer": result.answer,
+                "pages_used": result.pages_used,
+                "citations": result.citations,
+                "query_slug": result.query_slug if hasattr(result, "query_slug") else None,
+            }
+        except ImportError as e:
+            return {"error": f"Wiki module not available: {e}"}
+        except Exception as e:
+            logger.error(f"Wiki query error: {e}")
+            return {"error": str(e)}
+
+
+@dataclass
+class WikiLintTool(MCPTool):
+    """Run lint checks on the LLM Wiki."""
+
+    def __init__(self):
+        super().__init__(
+            name="ariadne_wiki_lint",
+            description=(
+                "Run health checks on the LLM Wiki. Structural lint detects "
+                "orphan pages, broken wikilinks, and pages with no outgoing links. "
+                "Semantic lint uses an LLM to detect contradictions, stale claims, "
+                "and missing cross-references."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "project_dir": {
+                        "type": "string",
+                        "description": "Wiki project root directory (default: '<data_dir>/wiki')",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "description": "Lint mode: 'structural', 'semantic', or 'full' (default: 'full')",
+                        "default": "full",
+                        "enum": ["structural", "semantic", "full"],
+                    },
+                    "llm_config": {
+                        "type": "object",
+                        "description": "LLM provider config for semantic lint: {provider, model, api_key, base_url}",
+                    },
+                },
+            },
+        )
+
+    def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        project_dir = arguments.get("project_dir")
+        mode = arguments.get("mode", "full")
+        llm_config = arguments.get("llm_config")
+
+        try:
+            from ariadne.wiki import WikiProject, run_full_lint, run_structural_lint, run_semantic_lint
+
+            # Resolve project directory
+            if project_dir:
+                proj = WikiProject(wiki_dir=project_dir)
+            else:
+                from ariadne.config import ConfigManager
+                data_dir = ConfigManager.load_default_data_dir()
+                proj = WikiProject(wiki_dir=str(data_dir / "wiki"))
+
+            if not proj.wiki_dir_exists:
+                return {"error": f"Wiki project not found: {proj.wiki_dir}"}
+
+            if mode == "structural":
+                issues = run_structural_lint(proj)
+            elif mode == "semantic":
+                issues = run_semantic_lint(proj, llm_config=llm_config)
+            else:
+                issues = run_full_lint(proj, llm_config=llm_config)
+
+            return {
+                "mode": mode,
+                "project_dir": proj.wiki_dir,
+                "total_issues": len(issues),
+                "issues": [
+                    {
+                        "type": i.issue_type.value,
+                        "severity": i.severity.value,
+                        "page": i.page_path,
+                        "message": i.message,
+                        "details": i.details,
+                    }
+                    for i in issues
+                ],
+            }
+        except ImportError as e:
+            return {"error": f"Wiki module not available: {e}"}
+        except Exception as e:
+            logger.error(f"Wiki lint error: {e}")
+            return {"error": str(e)}
+
+
+@dataclass
+class WikiListTool(MCPTool):
+    """List all pages in an LLM Wiki project."""
+
+    def __init__(self):
+        super().__init__(
+            name="ariadne_wiki_list",
+            description="List all wiki pages in a project, optionally filtered by type or tag.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "project_dir": {
+                        "type": "string",
+                        "description": "Wiki project root directory (default: '<data_dir>/wiki')",
+                    },
+                    "page_type": {
+                        "type": "string",
+                        "description": "Filter by page type: source, entity, concept, comparison, query, synthesis",
+                    },
+                    "tag": {
+                        "type": "string",
+                        "description": "Filter by tag in frontmatter",
+                    },
+                },
+            },
+        )
+
+    def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        project_dir = arguments.get("project_dir")
+        page_type = arguments.get("page_type")
+        tag = arguments.get("tag")
+
+        try:
+            from ariadne.wiki import WikiProject, list_wiki_pages, read_wiki_page
+
+            # Resolve project directory
+            if project_dir:
+                proj = WikiProject(wiki_dir=project_dir)
+            else:
+                from ariadne.config import ConfigManager
+                data_dir = ConfigManager.load_default_data_dir()
+                proj = WikiProject(wiki_dir=str(data_dir / "wiki"))
+
+            if not proj.wiki_dir_exists:
+                return {"error": f"Wiki project not found: {proj.wiki_dir}"}
+
+            pages = list_wiki_pages(proj.wiki_dir)
+            results = []
+
+            for path in pages:
+                page = read_wiki_page(path)
+                if page is None:
+                    continue
+
+                rel = path.replace(proj.wiki_dir, "").lstrip("/\\")
+
+                # Filter by page type
+                if page_type and page.frontmatter.page_type.value != page_type:
+                    continue
+
+                # Filter by tag
+                if tag and tag not in page.frontmatter.tags:
+                    continue
+
+                results.append({
+                    "path": rel,
+                    "title": page.frontmatter.title or rel,
+                    "type": page.frontmatter.page_type.value,
+                    "tags": page.frontmatter.tags,
+                    "created": page.frontmatter.created,
+                    "updated": page.frontmatter.updated,
+                    "preview": page.content[:200],
+                })
+
+            return {
+                "project_dir": proj.wiki_dir,
+                "total_pages": len(results),
+                "pages": results,
+            }
+        except ImportError as e:
+            return {"error": f"Wiki module not available: {e}"}
+        except Exception as e:
+            logger.error(f"Wiki list error: {e}")
+            return {"error": str(e)}
+

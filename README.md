@@ -19,6 +19,7 @@
 - [Quick Start](#quick-start)
 - [CLI Usage](#cli-usage)
 - [Architecture](#architecture)
+- [LLM Wiki](#llm-wiki)
 - [Agent Integration](#agent-integration)
 - [Roadmap](#roadmap)
 - [Credits](#credits)
@@ -62,6 +63,7 @@
 | ⏰ **Temporal KG** | Knowledge graph with valid_from/valid_to temporal support | ✅ |
 | 💾 **Auto-Save Hooks** | Stop/PreCompact/Session hooks for automatic persistence | ✅ |
 | 🤖 **Claude Code Integration** | Tool tracking, file modification, project context | ✅ |
+| 📖 **LLM Wiki** | Karpathy-style persistent wiki with two-step CoT ingest, Q&A, lint | ✅ |
 
 ---
 
@@ -310,6 +312,14 @@ ariadne/
 │   ├── reranker.py         # Cross-encoder reranker
 │   ├── citation.py         # Citation generator
 │   └── engine.py           # RAG engine
+├── wiki/                   # LLM Wiki (Karpathy pattern)
+│   ├── models.py          # WikiPage, WikiProject, LintResult models
+│   ├── prompts.py        # Two-step CoT prompt builders
+│   ├── builder.py        # File I/O, block parser, cache
+│   ├── ingestor.py       # Two-step CoT ingest pipeline
+│   ├── linter.py         # Structural + semantic lint
+│   ├── query.py          # Wiki Q&A with citation
+│   └── obsidian.py       # Obsidian vault import
 ├── mcp/                    # MCP Server
 │   ├── server.py           # MCP Server core (stdio / HTTP)
 │   ├── tools.py            # MCP Tools (4 tools)
@@ -332,6 +342,7 @@ ariadne/
 docs/                       # Documentation
 ├── AGENT_INTEGRATION.md   # Agent integration guide (Claude Code, Cursor, WorkBuddy)
 ├── MCP.md                 # MCP Server documentation
+├── LLM_WIKI.md            # LLM Wiki feature guide (Karpathy pattern)
 ├── Ariadne-Memory-SKILL.md     # Agent Skill definition file (Claude Code, Cursor, etc.)
 ├── TEST_AND_EXTENSION_PLAN.md
 ├── AutoSave.md
@@ -357,6 +368,85 @@ vendor/                    # Third-party packages
 ├── models/                 # Local model cache (all-MiniLM-L6-v2)
 └── cache/                  # Runtime cache (Chroma ONNX etc.)
 ```
+
+---
+
+## LLM Wiki
+
+Based on [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), Ariadne provides a persistent, queryable knowledge base that grows organically from your source documents.
+
+### Architecture
+
+```
+Raw Sources (immutable) → Wiki (LLM-generated) → Schema (rules & config)
+```
+
+### Three Core Operations
+
+| Operation | Command | Description |
+|-----------|---------|-------------|
+| **Ingest** | `ariadne wiki ingest <file>` | Two-step CoT: analyze source → generate wiki pages |
+| **Query** | `ariadne wiki query <question>` | Search wiki → LLM synthesizes answer with citations |
+| **Lint** | `ariadne wiki lint` | Structural (orphan/broken links) + semantic (LLM) checks |
+
+### Directory Structure
+
+```
+my-wiki/
+├── raw/
+│   ├── sources/       ← Drop source documents here
+│   └── assets/       ← Images and attachments
+├── wiki/
+│   ├── index.md      ← Auto-generated topic index
+│   ├── log.md        ← Ingest operation log
+│   ├── overview.md   ← Wiki summary
+│   ├── content/      ← Concept/entity pages
+│   └── queries/      ← Archived Q&A sessions
+├── schema.md         ← Wiki structure rules
+└── purpose.md       ← Wiki goals and purpose
+```
+
+### CLI Quick Start
+
+```bash
+# Initialize a wiki project
+ariadne wiki init my-wiki
+
+# Ingest a source file (two-step CoT)
+ariadne wiki ingest raw/papers/ml-survey.pdf -p my-wiki
+
+# Ask a question
+ariadne wiki query "What are the key findings?" -p my-wiki
+
+# Health check
+ariadne wiki lint -p my-wiki
+
+# List all pages
+ariadne wiki list -p my-wiki
+```
+
+### Obsidian Import
+
+Import entire Obsidian vaults with syntax conversion:
+
+```bash
+ariadne wiki ingest-vault /path/to/obsidian/vault -p my-wiki
+```
+
+Converts: `[[wikilink]]` → markdown links, `==highlight==` → `**bold**`, preserves frontmatter and `#tags`.
+
+### MCP Tools
+
+For AI Agent integration:
+
+| Tool | Description |
+|------|-------------|
+| `ariadne_wiki_ingest` | Ingest source with two-step CoT |
+| `ariadne_wiki_query` | Query wiki with LLM synthesis |
+| `ariadne_wiki_lint` | Structural + semantic health check |
+| `ariadne_wiki_list` | List pages by type/tag |
+
+See [docs/LLM_WIKI.md](docs/LLM_WIKI.md) for detailed documentation.
 
 ---
 

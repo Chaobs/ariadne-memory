@@ -99,6 +99,9 @@ app.add_typer(mcp_app, name="mcp")
 web_app = typer.Typer(help="Web UI commands (FastAPI + React frontend).")
 app.add_typer(web_app, name="web")
 
+wiki_app = typer.Typer(help="LLM Wiki commands (Karpathy-style persistent knowledge base).")
+app.add_typer(wiki_app, name="wiki")
+
 
 def version_callback(value: bool):
     if value:
@@ -1258,6 +1261,307 @@ def web_info():
     if not has_frontend:
         console.print("\n[yellow]Frontend not built yet.[/yellow]")
         console.print("[dim]  See: ariadne/web/frontend/ for React source[/dim]")
+
+
+# ═══════════════════════════════════════════
+# LLM Wiki
+# ═══════════════════════════════════════════
+
+@wiki_app.command("init", help="Initialize a new LLM Wiki project.")
+def wiki_init(
+    path: str = typer.Argument(".", help="Project directory path"),
+    name: str = typer.Option("", "--name", "-n", help="Wiki project name"),
+):
+    """Create a new LLM Wiki project with the standard directory structure."""
+    from ariadne.wiki import init_wiki_project
+    from ariadne.wiki.models import WikiProject
+
+    abs_path = os.path.abspath(path)
+    console.print(Panel(
+        f"[cyan]Initializing LLM Wiki[/cyan]\n"
+        f"Path: [bold]{abs_path}[/bold]",
+        title="Wiki Init",
+        border_style="cyan",
+    ))
+
+    try:
+        project = init_wiki_project(abs_path, name=name)
+        console.print(f"[green]✓[/green] Created wiki project at [bold]{abs_path}[/bold]")
+        console.print("\nStructure:")
+        console.print("  [dim]raw/sources/[/dim]     — Drop your source files here")
+        console.print("  [dim]raw/assets/[/dim]      — Images and attachments")
+        console.print("  [dim]wiki/[/dim]             — LLM-generated wiki pages")
+        console.print("  [dim]schema.md[/dim]         — Wiki structure rules")
+        console.print("  [dim]purpose.md[/dim]        — Wiki goals and purpose")
+        console.print("\n[dim]Next: ariadne wiki ingest <source-file>[/dim]")
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@wiki_app.command("ingest", help="Ingest a source file into the wiki (two-step CoT).")
+def wiki_ingest(
+    source: str = typer.Argument(..., help="Source file path"),
+    project: str = typer.Option(".", "--project", "-p", help="Wiki project directory"),
+    language: str = typer.Option("", "--lang", "-l", help="Output language (e.g. 'Chinese', 'English')"),
+    folder_context: str = typer.Option("", "--folder", "-f", help="Folder context hint for LLM"),
+    skip_cache: bool = typer.Option(False, "--skip-cache", help="Skip cache check"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
+):
+    """
+    Ingest a source document into the LLM Wiki using two-step Chain-of-Thought.
+
+    Step 1: LLM analyzes the source document
+    Step 2: LLM generates wiki pages (entities, concepts, source summary)
+    """
+    from ariadne.wiki import ingest_source, init_wiki_project
+    from ariadne.wiki.models import WikiProject
+
+    source_path = os.path.abspath(source)
+    project_path = os.path.abspath(project)
+
+    if not os.path.exists(source_path):
+        console.print(f"[red]Source file not found:[/red] {source_path}")
+        raise typer.Exit(1)
+
+    # Auto-init if project doesn't have wiki structure
+    if not os.path.exists(os.path.join(project_path, "wiki")):
+        console.print("[dim]Project not initialized. Auto-initializing...[/dim]")
+        init_wiki_project(project_path)
+
+    wiki_project = WikiProject(root_path=project_path)
+
+    console.print(Panel(
+        f"[cyan]LLM Wiki Ingest[/cyan]\n"
+        f"Source: [bold]{os.path.basename(source_path)}[/bold]\n"
+        f"Project: [dim]{project_path}[/dim]",
+        title="Wiki Ingest",
+        border_style="cyan",
+    ))
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task("Step 1/2: Analyzing source...", total=None)
+
+        result = ingest_source(
+            project=wiki_project,
+            source_path=source_path,
+            language=language,
+            folder_context=folder_context,
+            skip_cache=skip_cache,
+        )
+
+        progress.update(task, description="Done")
+
+    if result.cached:
+        console.print(f"[yellow]⚡ Cached[/yellow] — {len(result.pages_written)} pages from previous ingest")
+    else:
+        console.print(f"[green]✓[/green] Generated [bold]{len(result.pages_written)}[/bold] wiki page(s)")
+
+    if verbose and result.pages_written:
+        for p in result.pages_written:
+            console.print(f"  [dim]→ {p}[/dim]")
+
+    if result.review_items:
+        console.print(f"[yellow]⚠[/yellow]  {len(result.review_items)} item(s) flagged for review")
+
+    if result.warnings:
+        for w in result.warnings:
+            console.print(f"[yellow]Warning:[/yellow] {w}")
+
+
+@wiki_app.command("ingest-vault", help="Import an Obsidian vault into the wiki project.")
+def wiki_ingest_vault(
+    vault: str = typer.Argument(..., help="Path to Obsidian vault directory"),
+    project: str = typer.Option(".", "--project", "-p", help="Wiki project directory"),
+    ingest: bool = typer.Option(False, "--ingest", help="Run LLM ingest after importing"),
+    language: str = typer.Option("", "--lang", "-l", help="Output language"),
+):
+    """Import an Obsidian vault into the wiki project's raw/sources/ directory."""
+    from ariadne.wiki import import_obsidian_vault
+    from ariadne.wiki.models import WikiProject
+
+    vault_path = os.path.abspath(vault)
+    project_path = os.path.abspath(project)
+
+    if not os.path.isdir(vault_path):
+        console.print(f"[red]Vault directory not found:[/red] {vault_path}")
+        raise typer.Exit(1)
+
+    wiki_project = WikiProject(root_path=project_path)
+
+    console.print(Panel(
+        f"[cyan]Obsidian Vault Import[/cyan]\n"
+        f"Vault: [bold]{vault_path}[/bold]\n"
+        f"Project: [dim]{project_path}[/dim]\n"
+        f"LLM Ingest: [bold]{'Yes' if ingest else 'No'}[/bold]",
+        title="Wiki Vault Import",
+        border_style="cyan",
+    ))
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+        progress.add_task("Importing vault...", total=None)
+        result = import_obsidian_vault(
+            vault_path=vault_path,
+            project=wiki_project,
+            copy_to_raw=True,
+            ingest_immediately=ingest,
+            language=language,
+        )
+
+    if "error" in result:
+        console.print(f"[red]Error:[/red] {result['error']}")
+        raise typer.Exit(1)
+
+    console.print(f"[green]✓[/green] Imported [bold]{len(result['imported_files'])}[/bold] files")
+    if result['skipped_files']:
+        console.print(f"[dim]Skipped {len(result['skipped_files'])} files[/dim]")
+    if result['errors']:
+        for e in result['errors']:
+            console.print(f"[yellow]Warning:[/yellow] {e}")
+
+
+@wiki_app.command("query", help="Ask a question against the wiki knowledge base.")
+def wiki_query(
+    question: str = typer.Argument(..., help="Question to ask"),
+    project: str = typer.Option(".", "--project", "-p", help="Wiki project directory"),
+    language: str = typer.Option("", "--lang", "-l", help="Output language"),
+    save: bool = typer.Option(False, "--save", "-s", help="Save answer to wiki/queries/"),
+):
+    """Query the wiki knowledge base and get a cited answer."""
+    from ariadne.wiki import query_wiki
+    from ariadne.wiki.models import WikiProject
+
+    project_path = os.path.abspath(project)
+    wiki_project = WikiProject(root_path=project_path)
+
+    console.print(Panel(
+        f"[cyan]Wiki Query[/cyan]\n"
+        f"[bold]{question}[/bold]",
+        title="Wiki Query",
+        border_style="cyan",
+    ))
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+        progress.add_task("Searching wiki and generating answer...", total=None)
+        result = query_wiki(
+            project=wiki_project,
+            question=question,
+            language=language,
+            save_to_wiki=save,
+        )
+
+    console.print("\n" + result.answer)
+
+    if result.cited_pages:
+        console.print(f"\n[dim]Sources: {', '.join(result.cited_pages[:5])}[/dim]")
+
+    if result.saved_to:
+        console.print(f"\n[green]✓[/green] Saved to [bold]{result.saved_to}[/bold]")
+
+
+@wiki_app.command("lint", help="Check wiki health (structural + semantic).")
+def wiki_lint(
+    project: str = typer.Option(".", "--project", "-p", help="Wiki project directory"),
+    structural_only: bool = typer.Option(False, "--structural", help="Only run structural checks (no LLM)"),
+    language: str = typer.Option("", "--lang", "-l", help="Output language for semantic lint"),
+):
+    """Run structural and semantic lint checks on the wiki."""
+    from ariadne.wiki import run_structural_lint, run_semantic_lint, run_full_lint
+    from ariadne.wiki.models import WikiProject, LintSeverity
+
+    project_path = os.path.abspath(project)
+    wiki_project = WikiProject(root_path=project_path)
+
+    console.print(Panel(
+        f"[cyan]Wiki Lint[/cyan]\n"
+        f"Project: [dim]{project_path}[/dim]\n"
+        f"Mode: [bold]{'Structural only' if structural_only else 'Full (structural + semantic)'}[/bold]",
+        title="Wiki Lint",
+        border_style="cyan",
+    ))
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+        progress.add_task("Analyzing wiki...", total=None)
+        if structural_only:
+            results = run_structural_lint(wiki_project)
+        else:
+            results = run_full_lint(wiki_project, language=language)
+
+    if not results:
+        console.print("[green]✓[/green] Wiki looks healthy! No issues found.")
+        return
+
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Severity", style="bold", width=10)
+    table.add_column("Type", width=18)
+    table.add_column("Page", width=30)
+    table.add_column("Detail")
+
+    for r in results:
+        severity_style = "red" if r.severity == LintSeverity.WARNING else "yellow"
+        table.add_row(
+            f"[{severity_style}]{r.severity.value}[/{severity_style}]",
+            r.issue_type.value,
+            r.page,
+            r.detail[:80],
+        )
+
+    console.print(table)
+    warnings = sum(1 for r in results if r.severity == LintSeverity.WARNING)
+    infos = len(results) - warnings
+    console.print(f"\nTotal: [red]{warnings} warning(s)[/red], [yellow]{infos} info(s)[/yellow]")
+
+
+@wiki_app.command("list", help="List all wiki pages.")
+def wiki_list(
+    project: str = typer.Option(".", "--project", "-p", help="Wiki project directory"),
+):
+    """List all pages in the wiki."""
+    from ariadne.wiki import list_wiki_pages
+    from ariadne.wiki.models import WikiProject
+
+    project_path = os.path.abspath(project)
+    wiki_project = WikiProject(root_path=project_path)
+
+    pages = list_wiki_pages(wiki_project.wiki_dir)
+    if not pages:
+        console.print("[dim]No wiki pages found.[/dim]")
+        return
+
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("#", width=4)
+    table.add_column("Page", width=50)
+    table.add_column("Type", width=12)
+
+    for i, path in enumerate(pages, 1):
+        from ariadne.wiki import read_wiki_page
+        page = read_wiki_page(path)
+        rel = os.path.relpath(path, wiki_project.wiki_dir).replace("\\", "/")
+        page_type = page.frontmatter.page_type.value if page else "-"
+        table.add_row(str(i), rel, page_type)
+
+    console.print(table)
+    console.print(f"\n[dim]{len(pages)} page(s) total[/dim]")
 
 
 # ═══════════════════════════════════════════
