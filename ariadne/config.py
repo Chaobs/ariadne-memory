@@ -81,7 +81,7 @@ def get_default_config_dir() -> Path:
 class LLMConfigData:
     """LLM configuration data."""
     provider: str = "deepseek"
-    model: str = "deepseek-chat"
+    model: str = "deepseek-v4-flash"
     api_key: str = ""
     base_url: Optional[str] = None
     temperature: float = 0.7
@@ -95,7 +95,7 @@ class LLMConfigData:
     def from_dict(cls, data: dict) -> "LLMConfigData":
         return cls(
             provider=data.get("provider", "deepseek"),
-            model=data.get("model", "deepseek-chat"),
+            model=data.get("model", "deepseek-v4-flash"),
             api_key=data.get("api_key", ""),
             base_url=data.get("base_url"),
             temperature=data.get("temperature", 0.7),
@@ -244,7 +244,7 @@ class AriadneConfig:
     DEFAULT_CONFIG = {
         "llm": {
             "provider": "deepseek",
-            "model": "deepseek-chat",
+            "model": "deepseek-v4-flash",
             "temperature": 0.7,
             "max_tokens": 2048,
         },
@@ -282,7 +282,7 @@ class AriadneConfig:
     
     # Supported providers for display
     SUPPORTED_PROVIDERS = [
-        ("deepseek", "DeepSeek", "deepseek-chat, deepseek-coder"),
+        ("deepseek", "DeepSeek", "deepseek-v4-flash, deepseek-v4-pro"),
         ("openai", "OpenAI (GPT)", "gpt-4o, gpt-4, gpt-3.5-turbo"),
         ("anthropic", "Anthropic (Claude)", "claude-3-5-sonnet, claude-3-opus"),
         ("qwen", "Alibaba (Qwen)", "qwen-plus, qwen-turbo, qwen-max"),
@@ -544,7 +544,7 @@ class AriadneConfig:
         
         return LLMConfig(
             provider=LLMProvider(llm_cfg.get("provider", "deepseek")),
-            model=llm_cfg.get("model", "deepseek-chat"),
+            model=llm_cfg.get("model", "deepseek-v4-flash"),
             api_key=api_key,
             base_url=llm_cfg.get("base_url"),
             temperature=llm_cfg.get("temperature", 0.7),
@@ -661,7 +661,7 @@ class AriadneConfig:
         llm_cfg = self._config.get("llm", {})
         return {
             "provider": llm_cfg.get("provider", "deepseek"),
-            "model": llm_cfg.get("model", "deepseek-chat"),
+            "model": llm_cfg.get("model", "deepseek-v4-flash"),
             "has_api_key": bool(llm_cfg.get("api_key") or os.environ.get(
                 f"{llm_cfg.get('provider', 'deepseek').upper()}_API_KEY"
             )),

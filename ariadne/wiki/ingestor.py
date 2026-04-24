@@ -23,6 +23,8 @@ from ariadne.wiki.prompts import build_analysis_prompt, build_generation_prompt
 
 def _get_llm(config: Optional[Dict[str, Any]] = None):
     """Get LLM instance from config or Ariadne's config manager."""
+    from ariadne.llm.factory import LLMFactory
+
     if config:
         from ariadne.llm.base import LLMConfig, LLMProvider
         provider = LLMProvider(config.get("provider", "deepseek"))
@@ -35,18 +37,23 @@ def _get_llm(config: Optional[Dict[str, Any]] = None):
             temperature=config.get("temperature", 0.1),
             timeout=config.get("timeout", 300),  # 5 min for ingest
         )
-        from ariadne.llm.factory import LLMFactory
         return LLMFactory.create(llm_config)
 
-    # Try using Ariadne's default config
-    try:
-        from ariadne.llm.factory import ConfigManager
-        llm_config = ConfigManager.load_default()
-        if llm_config:
-            from ariadne.llm.factory import LLMFactory
-            return LLMFactory.create(llm_config)
-    except Exception:
-        pass
+    # Try loading from project-root config.json (via centralized paths module)
+    from ariadne.paths import CONFIG_FILE
+    project_config = str(CONFIG_FILE)
+    if os.path.exists(project_config):
+        try:
+            llm = LLMFactory.from_json_file(project_config)
+            if llm:
+                return llm
+        except Exception:
+            pass
+
+    # Try using environment variables (DEEPSEEK_API_KEY, etc.)
+    llm = LLMFactory.from_env("DEEPSEEK")
+    if llm:
+        return llm
 
     return None
 

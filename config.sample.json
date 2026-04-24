@@ -4,9 +4,9 @@
 
   "llm": {
     "provider": "deepseek",
-    "model": "deepseek-chat",
+    "model": "deepseek-v4-flash",
     "api_key": "YOUR_API_KEY_HERE",
-    "base_url": null,
+    "base_url": "https://api.deepseek.com",
     "temperature": 0.7,
     "max_tokens": 2048,
     "timeout": 60
@@ -52,7 +52,7 @@
   "_llm_providers_examples": {
     "deepseek": {
       "provider": "deepseek",
-      "model": "deepseek-chat",
+      "model": "deepseek-v4-flash",
       "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxx",
       "base_url": "https://api.deepseek.com"
     },
