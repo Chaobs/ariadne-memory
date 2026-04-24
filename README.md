@@ -68,6 +68,10 @@
 | 💾 **Auto-Save Hooks** | Stop/PreCompact/Session hooks for automatic persistence | ✅ |
 | 🤖 **Claude Code Integration** | Tool tracking, file modification, project context | ✅ |
 | 📖 **LLM Wiki** | Karpathy-style persistent wiki with two-step CoT ingest, Q&A, lint | ✅ |
+| 🔴 **SSE Real-time Updates** | Server-Sent Events for live observation/summary updates | ✅ |
+| 🔄 **5-Hook Lifecycle** | SessionStart/UserPromptSubmit/PostToolUse/Stop/SessionEnd | ✅ |
+| 🎯 **Content-Hash Dedup** | SHA256 deduplication with 30-second sliding window | ✅ |
+| 🖥️ **Session Memory UI** | Web UI dedicated page for real-time session observation display | ✅ |
 
 ---
 

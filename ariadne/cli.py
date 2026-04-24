@@ -102,6 +102,12 @@ app.add_typer(web_app, name="web")
 wiki_app = typer.Typer(help="LLM Wiki commands (Karpathy-style persistent knowledge base).")
 app.add_typer(wiki_app, name="wiki")
 
+session_app = typer.Typer(help="Session memory commands (cross-session observation capture).")
+app.add_typer(session_app, name="session")
+
+hook_app = typer.Typer(help="Hook runner for IDE/AI platform lifecycle events.")
+app.add_typer(hook_app, name="hook")
+
 
 def version_callback(value: bool):
     if value:
@@ -1565,6 +1571,257 @@ def wiki_list(
 
 
 # ═══════════════════════════════════════════
+# Session Memory
+# ═══════════════════════════════════════════
+
+@session_app.command("start")
+def session_start(
+    project: str = typer.Option(".", "--project", "-p", help="Project directory"),
+    platform: str = typer.Option("generic", "--platform", help="Platform: claude_code, openclaw, cursor, generic"),
+):
+    """Start a new session and display prior context."""
+    from ariadne.session import get_manager, Platform
+    project_path = os.path.abspath(project)
+    try:
+        plat = Platform(platform)
+    except ValueError:
+        plat = Platform.GENERIC
+
+    mgr = get_manager()
+    session, context = mgr.start_session(project_path=project_path, platform=plat)
+
+    console.print(Panel(
+        f"Session ID: [bold cyan]{session.id}[/bold cyan]\n"
+        f"Project: [dim]{project_path}[/dim]\n"
+        f"Platform: [dim]{plat.value}[/dim]",
+        title="Session Started",
+        border_style="green",
+    ))
+
+    if context:
+        console.print("\n[cyan]Prior context injected:[/cyan]")
+        console.print(Panel(context[:1000] + ("..." if len(context) > 1000 else ""),
+                             border_style="dim"))
+    else:
+        console.print("[dim]No prior session history found.[/dim]")
+
+
+@session_app.command("end")
+def session_end(
+    session_id: str = typer.Argument(..., help="Session ID to end"),
+    no_summary: bool = typer.Option(False, "--no-summary", help="Skip LLM summarization"),
+):
+    """End a session and generate a summary."""
+    from ariadne.session import get_manager
+    mgr = get_manager()
+
+    with console.status("Ending session and generating summary..."):
+        summary = mgr.end_session(session_id, generate_summary=not no_summary)
+
+    if summary:
+        console.print(Panel(
+            f"[bold]Narrative:[/bold] {summary.narrative}\n\n"
+            + (f"[bold]Key decisions:[/bold] {', '.join(summary.key_decisions)}\n" if summary.key_decisions else "")
+            + (f"[bold]Files:[/bold] {', '.join(summary.files_changed[:5])}" if summary.files_changed else ""),
+            title="[cyan]Session Summary[/cyan]",
+            border_style="cyan",
+        ))
+    else:
+        console.print(f"[green]✓[/green] Session [dim]{session_id}[/dim] ended.")
+
+
+@session_app.command("list")
+def session_list(
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Number of sessions"),
+):
+    """List recent sessions."""
+    from ariadne.session import get_manager
+    mgr = get_manager()
+
+    project_path = os.path.abspath(project) if project else None
+    sessions = mgr.list_sessions(project_path=project_path, limit=limit)
+
+    if not sessions:
+        console.print("[dim]No sessions found.[/dim]")
+        return
+
+    table = Table(title="Recent Sessions", show_lines=False)
+    table.add_column("Date", style="dim", width=12)
+    table.add_column("Platform", style="cyan", width=12)
+    table.add_column("Status", width=10)
+    table.add_column("Summary")
+
+    for s in sessions:
+        date = s.started_at[:10]
+        status_color = {"active": "green", "completed": "blue", "summarized": "cyan"}.get(s.status.value, "dim")
+        summary = (s.summary[:60] + "...") if s.summary and len(s.summary) > 60 else (s.summary or "[dim]–[/dim]")
+        table.add_row(date, s.platform.value, f"[{status_color}]{s.status.value}[/{status_color}]", summary)
+
+    console.print(table)
+
+
+@session_app.command("search")
+def session_search(
+    query: str = typer.Argument(..., help="Search query"),
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Filter by project path"),
+    limit: int = typer.Option(10, "--limit", "-n", help="Number of results"),
+):
+    """Search session memory for relevant observations."""
+    from ariadne.session import get_manager
+    mgr = get_manager()
+
+    project_path = os.path.abspath(project) if project else None
+
+    with console.status("Searching session memory..."):
+        results = mgr.search_observations(query=query, project_path=project_path, limit=limit)
+
+    if not results:
+        console.print("[yellow]No matching observations found.[/yellow]")
+        return
+
+    console.print(f"\nFound [bold green]{len(results)}[/bold green] results:\n")
+    for obs, score in results:
+        console.print(f"[{obs.obs_type.value.upper()}] {obs.summary}")
+        console.print(f"  [dim]Score: {score:.3f} · {obs.created_at[:10]}[/dim]")
+        if obs.files:
+            console.print(f"  [dim]Files: {', '.join(obs.files[:3])}[/dim]")
+        console.print()
+
+
+@session_app.command("stats")
+def session_stats():
+    """Show session memory statistics."""
+    from ariadne.session import get_manager
+    mgr = get_manager()
+    stats = mgr.stats()
+
+    console.print(Panel(
+        f"Sessions:     [cyan]{stats.get('sessions', 0)}[/cyan]\n"
+        f"Observations: [cyan]{stats.get('observations', 0)}[/cyan]\n"
+        f"Active:       [green]{stats.get('active_sessions', 0)}[/green]\n"
+        f"Pending msgs: [dim]{stats.get('pending_messages', 0)}[/dim]",
+        title="Session Memory Stats",
+        border_style="cyan",
+    ))
+
+
+@session_app.command("recent")
+def session_recent(
+    project: str = typer.Option(".", "--project", "-p", help="Project directory"),
+    limit: int = typer.Option(3, "--limit", "-n", help="Number of sessions to show"),
+):
+    """Show recent work context from session memory."""
+    from ariadne.session import get_manager
+    mgr = get_manager()
+    project_path = os.path.abspath(project)
+    text = mgr.recent_context_text(project_path=project_path, limit=limit)
+    console.print(Panel(text, title="[cyan]Recent Work Context[/cyan]", border_style="cyan"))
+
+
+# ═══════════════════════════════════════════
+# Hook Runner
+# ═══════════════════════════════════════════
+
+@hook_app.command("run")
+def hook_run(
+    event: str = typer.Option(..., "--event", "-e",
+        help="Hook event: session_start, user_prompt, post_tool, stop, session_end"),
+    platform: Optional[str] = typer.Option(None, "--platform", "-p",
+        help="Platform: claude_code, openclaw, cursor, windsurf, generic"),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Disable LLM observation analysis"),
+):
+    """
+    Run an Ariadne session memory hook (reads JSON from stdin).
+
+    This command is designed to be called by IDE/AI platform lifecycle hooks.
+
+    Example Claude Code configuration (~/.claude/settings.json):
+
+        {
+          "hooks": {
+            "SessionStart":     [{"hooks": [{"type": "command", "command": "ariadne hook run --event session_start"}]}],
+            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "ariadne hook run --event user_prompt"}]}],
+            "PostToolUse":      [{"hooks": [{"type": "command", "command": "ariadne hook run --event post_tool"}]}],
+            "Stop":             [{"hooks": [{"type": "command", "command": "ariadne hook run --event stop"}]}]
+          }
+        }
+
+    Example usage from command line:
+
+        echo '{"session_id": "abc", "cwd": "/my/project"}' | ariadne hook run --event session_start
+    """
+    from ariadne.hooks.runner import run_hook
+    result = run_hook(event=event, platform=platform, use_llm=not no_llm)
+
+    if result.context:
+        # Write context to stdout — this is what the IDE injects
+        sys.stdout.write(result.context)
+        sys.stdout.flush()
+
+    raise typer.Exit(result.exit_code)
+
+
+@hook_app.command("setup")
+def hook_setup(
+    platform: str = typer.Argument("claude_code",
+        help="Platform to configure: claude_code, cursor"),
+    show_only: bool = typer.Option(False, "--show", help="Show configuration without writing"),
+):
+    """Generate hook configuration for your AI platform."""
+    ariadne_cmd = "ariadne hook run"
+
+    configs = {
+        "claude_code": {
+            "file": "~/.claude/settings.json",
+            "config": {
+                "hooks": {
+                    "SessionStart":     [{"hooks": [{"type": "command", "command": f"{ariadne_cmd} --event session_start"}]}],
+                    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": f"{ariadne_cmd} --event user_prompt"}]}],
+                    "PostToolUse":      [{"hooks": [{"type": "command", "command": f"{ariadne_cmd} --event post_tool"}]}],
+                    "Stop":             [{"hooks": [{"type": "command", "command": f"{ariadne_cmd} --event stop"}]}],
+                }
+            }
+        },
+        "cursor": {
+            "file": "~/.cursor/settings.json",
+            "config": {
+                "ariadne.hooks": {
+                    "session_start": f"{ariadne_cmd} --event session_start --platform cursor",
+                    "post_tool":     f"{ariadne_cmd} --event post_tool --platform cursor",
+                    "stop":          f"{ariadne_cmd} --event stop --platform cursor",
+                }
+            }
+        }
+    }
+
+    cfg = configs.get(platform)
+    if not cfg:
+        console.print(f"[red]Unknown platform: {platform}[/red]")
+        console.print(f"Supported: {', '.join(configs.keys())}")
+        raise typer.Exit(1)
+
+    import json as _json
+    config_str = _json.dumps(cfg["config"], indent=2)
+
+    console.print(Panel(
+        f"[bold]Target file:[/bold] {cfg['file']}\n\n"
+        f"[bold]Configuration:[/bold]\n{config_str}",
+        title=f"[cyan]Hook Setup: {platform}[/cyan]",
+        border_style="cyan",
+    ))
+
+    if not show_only:
+        console.print(
+            f"\n[dim]Add the above to [bold]{cfg['file']}[/bold] to enable session memory hooks.[/dim]"
+        )
+        console.print(
+            "[dim]For MCP-based platforms (OpenClaw), use ariadne_session_start / "
+            "ariadne_session_observe tools directly.[/dim]"
+        )
+
+
+# ═══════════════════════════════════════════
 # Entry point
 # ═══════════════════════════════════════════
 
@@ -1581,3 +1838,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

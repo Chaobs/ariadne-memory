@@ -13,6 +13,7 @@ import Summarize from './pages/Summarize';
 import Graph from './pages/Graph';
 import Settings from './pages/Settings';
 import Wiki from './pages/Wiki';
+import Session from './pages/Session';
 import { initI18n } from './i18n';
 
 // Initialize i18n at app startup
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="wiki" element={<Wiki />} />
           <Route path="graph" element={<Graph />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="session" element={<Session />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

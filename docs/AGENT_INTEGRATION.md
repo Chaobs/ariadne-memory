@@ -526,7 +526,87 @@ Web 服务默认地址：`http://localhost:8770`
 
 ---
 
-## 十、相关文档
+## 十、Session Memory Hook 集成
+
+Ariadne 支持 5 钩子生命周期，参考 Claude-Mem 的设计，实现跨会话永久记忆。
+
+### 10.1 钩子事件
+
+| 事件 | 触发时机 | 输入数据 |
+|------|----------|----------|
+| `session_start` | 会话开始 | session_id, cwd, platform |
+| `user_prompt` | 用户提交输入 | session_id, user_message |
+| `post_tool` | 工具调用后 | session_id, tool_name, tool_input, tool_output |
+| `stop` | 中途停止/保存 | session_id, transcript |
+| `session_end` | 会话结束 | session_id |
+
+### 10.2 CLI 钩子命令
+
+```bash
+# 启动新会话
+ariadne session start --platform openclaw
+
+# 查看最近的会话
+ariadne session list --limit 10
+
+# 搜索观察记录
+ariadne session search "bug fix"
+
+# 查看会话统计
+ariadne session stats
+
+# 结束会话并生成摘要
+ariadne session end <session_id>
+
+# 手动触发钩子（用于测试）
+echo '{"session_id": "abc", "tool_name": "read_file"}' | ariadne hook run --event post_tool
+```
+
+### 10.3 平台适配器
+
+Ariadne 支持多种平台的 hook 事件格式：
+
+| 平台 | 适配器 | 特点 |
+|------|--------|------|
+| Claude Code | `ClaudeCodeAdapter` | 完整 hook 格式 |
+| OpenClaw/WorkBuddy | `OpenClawAdapter` | MCP 工具调用跟踪 |
+| Cursor | `CursorAdapter` | IDE 工具集成 |
+| Windsurf | `WindsurfAdapter` | Codeium 生态 |
+| 通用 | `GenericAdapter` | 回退适配 |
+
+### 10.4 SSE 实时推送
+
+Session Memory 支持 SSE (Server-Sent Events) 实时推送观察记录到 Web UI：
+
+```javascript
+// Web 前端 SSE 连接
+const eventSource = new EventSource('/api/sse?session_id=your-session-id');
+
+eventSource.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  if (data.type === 'new_observation') {
+    console.log('New observation:', data.data);
+    // 更新 UI
+  }
+};
+```
+
+API 端点：
+- `GET /api/sse` — SSE 实时流
+- `GET /api/sse/stats` — 连接统计
+- `GET /api/sse/dedup/stats` — 去重缓存统计
+
+### 10.5 Content-Hash 去重
+
+SHA256 内容哈希 + 30 秒滑动窗口防止重复观察：
+
+```
+hash = SHA256(session_id | title | narrative)
+```
+
+---
+
+## 十一、相关文档
 
 | 文档 | 路径 | 说明 |
 |------|------|------|
@@ -534,3 +614,5 @@ Web 服务默认地址：`http://localhost:8770`
 | MCP文档 | `docs/MCP.md` | MCP Server 详细文档 |
 | MCP配置示例 | `examples/mcp_config.json` | MCP 客户端配置模板 |
 | 测试计划 | `docs/TEST_AND_EXTENSION_PLAN.md` | 测试方案和扩展计划 |
+| Session Memory 设计 | `docs/SESSION_MEMORY_HOOK_DESIGN.md` | Hook 系统架构设计 |
+| Claude-Mem对比 | `docs/CLAUDE_MEM_COMPARISON.md` | Claude-Mem 功能对比分析 |

@@ -420,6 +420,14 @@ class AriadneToolHandler:
         self._tools["ariadne_wiki_lint"] = WikiLintTool()
         self._tools["ariadne_wiki_list"] = WikiListTool()
 
+        # Session Memory Tools (Claude-Mem inspired — cross-session observation capture)
+        try:
+            from ariadne.mcp.session_tools import register_session_tools
+            register_session_tools(self)
+        except Exception as e:
+            import logging as _log
+            _log.getLogger(__name__).warning(f"Session memory tools not available: {e}")
+
     def register(self, name: str, tool: MCPTool):
         """Register a new tool."""
         self._tools[name] = tool
@@ -443,6 +451,12 @@ class AriadneToolHandler:
             "llm": ["ariadne_summarize"],
             "config": ["ariadne_config_get"],
             "wiki": ["ariadne_wiki_ingest", "ariadne_wiki_query", "ariadne_wiki_lint", "ariadne_wiki_list"],
+            "session": [
+                "ariadne_session_start", "ariadne_session_observe", "ariadne_session_add",
+                "ariadne_session_summarize", "ariadne_session_end",
+                "ariadne_session_search", "ariadne_session_timeline", "ariadne_session_get",
+                "ariadne_session_list", "ariadne_session_context",
+            ],
         }
         return categories
 

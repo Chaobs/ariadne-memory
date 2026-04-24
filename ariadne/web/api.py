@@ -211,6 +211,10 @@ def create_app() -> FastAPI:
     from ariadne.web.api_extensions import register_extension_routers
     register_extension_routers(app)
 
+    # Register SSE router for real-time Session Memory updates
+    from ariadne.web.sse_api import sse_router
+    app.include_router(sse_router)
+
     @app.get("/api/health")
     async def health_check():
         return {"status": "ok", "version": __version__}

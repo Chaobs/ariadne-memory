@@ -25,6 +25,7 @@ const navItems = [
   { path: '/', label: 'nav.home', icon: '⌂' },
   { path: '/search', label: 'nav.search', icon: '🔍' },
   { path: '/memory', label: 'nav.memory', icon: '💾' },
+  { path: '/session', label: 'nav.session', icon: '🧠' },
   { path: '/ingest', label: 'nav.ingest', icon: '📥' },
   { path: '/summarize', label: 'nav.summarize', icon: '📝' },
   { path: '/wiki', label: 'nav.wiki', icon: '📖' },
