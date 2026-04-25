@@ -16,6 +16,7 @@ Endpoints:
 """
 
 import os
+import platform
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -328,8 +329,12 @@ async def wiki_recent_projects():
         return {"ok": True, "projects": []}
 
 
+class WikiSaveProjectRequest(BaseModel):
+    project_path: str
+
+
 @router.post("/projects/save")
-async def wiki_save_project(project_path: str):
+async def wiki_save_project(req: WikiSaveProjectRequest):
     """Save a wiki project path to the recent projects list."""
     try:
         import json
@@ -342,7 +347,7 @@ async def wiki_save_project(project_path: str):
             with open(config_path, "r", encoding="utf-8") as f:
                 projects = json.load(f)
 
-        abs_path = os.path.abspath(project_path)
+        abs_path = os.path.abspath(req.project_path)
         if abs_path not in projects:
             projects.insert(0, abs_path)
             projects = projects[:10]  # Keep last 10
@@ -350,6 +355,70 @@ async def wiki_save_project(project_path: str):
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(projects, f, ensure_ascii=False, indent=2)
 
-        return {"ok": True}
+        return {"ok": True, "project_path": abs_path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── File System Browser ────────────────────────────────────────────────────────
+
+@router.get("/fs/browse")
+async def fs_browse(path: str = "", mode: str = "dir"):
+    """
+    Browse the local filesystem.
+
+    mode: "dir" — list directories only (for project dir selection)
+          "file" — list files (for source file selection)
+    Args:
+        path: absolute directory to list; empty = platform drives or home
+        mode: "dir" or "file"
+    """
+    try:
+        # Default start: home directory
+        if not path:
+            path = os.path.expanduser("~")
+
+        abs_path = os.path.abspath(path)
+        if not os.path.isdir(abs_path):
+            raise HTTPException(status_code=404, detail=f"Directory not found: {abs_path}")
+
+        entries = []
+        try:
+            items = sorted(os.listdir(abs_path), key=lambda x: (not os.path.isdir(os.path.join(abs_path, x)), x.lower()))
+        except PermissionError:
+            items = []
+
+        for name in items:
+            full = os.path.join(abs_path, name)
+            is_dir = os.path.isdir(full)
+            if name.startswith('.'):
+                continue
+            if mode == "dir" and not is_dir:
+                continue
+            entries.append({
+                "name": name,
+                "path": full,
+                "is_dir": is_dir,
+            })
+
+        # Build parent path
+        parent = os.path.dirname(abs_path) if abs_path != os.path.dirname(abs_path) else None
+
+        # Windows: add drives list at root
+        drives = []
+        if platform.system() == "Windows" and (not path or abs_path == parent):
+            import string
+            drives = [f"{d}:\\" for d in string.ascii_uppercase
+                      if os.path.exists(f"{d}:\\")]
+
+        return {
+            "ok": True,
+            "current": abs_path,
+            "parent": parent,
+            "entries": entries,
+            "drives": drives,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

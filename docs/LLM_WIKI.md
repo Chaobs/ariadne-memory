@@ -96,20 +96,31 @@ done
 cat my-wiki/wiki/log.md
 ```
 
-### Web API
+## Web UI 使用指南
 
-```bash
-# 初始化项目
-POST /api/wiki/init
-Body: { "project_path": "/path/to/my-wiki" }
+> **v0.7.1 新增**: Project Directory 目录选择器、Ingest 文件选择器、帮助按钮、统一按钮样式
 
-# 摄入文件
-POST /api/wiki/ingest
-Body: { "source": "/path/to/file.pdf", "project_dir": "...", "force": false }
+### 快速开始
 
-# 流式摄入（SSE）
-POST /api/wiki/ingest/stream  # (via ingest/files/stream)
-```
+1. **设置 Project Directory** — 点击 📁 图标打开目录选择器，或直接在输入框手动输入路径
+2. **保存到最近** — 点击 💾 Save to Recent，路径将出现在「🕒 最近使用」下拉菜单中
+3. **初始化项目** — 点击 📋 Initialized Project，跳转 Overview 标签，输入名称后点击 ✨ Initialize
+4. **摄入文档** — 切换到 📥 Ingest，点击 📂 选择文件，或手动输入路径，点击 Ingest into Wiki
+5. **提问查询** — 切换到 ❓ Query，输入问题，点击 Ask Wiki
+
+### Web API 端点
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/api/wiki/init` | 初始化项目（JSON body: `project_path`, `name`） |
+| `POST` | `/api/wiki/ingest` | 摄入源文件（JSON body: `source_path`, `project_path`） |
+| `POST` | `/api/wiki/query` | 问答（JSON body: `question`, `project_path`） |
+| `POST` | `/api/wiki/lint` | Lint 检查 |
+| `GET` | `/api/wiki/pages` | 列出页面 |
+| `GET` | `/api/wiki/fs/browse` | 文件系统浏览（`?path=...&mode=dir\|file`） |
+| `POST` | `/api/wiki/projects/save` | 保存到最近（JSON body: `project_path`） |
+
+
 
 ## 问答流程（Query）
 

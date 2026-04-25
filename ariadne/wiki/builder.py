@@ -307,16 +307,36 @@ def init_wiki_project(
 # ── File I/O ───────────────────────────────────────────────────────────────────
 
 def read_file_safe(path: str) -> str:
-    """Read file content, return empty string on failure."""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return f.read()
-    except (OSError, UnicodeDecodeError):
+    """
+    Read file content as plain text, return empty string on failure.
+    Supports binary formats (docx, pdf, xlsx, pptx, etc.) via markitdown.
+    """
+    # Binary/Office formats: use markitdown for extraction
+    _BINARY_EXTS = {
+        ".docx", ".doc", ".pdf", ".xlsx", ".xls",
+        ".pptx", ".ppt", ".odt", ".epub",
+    }
+    ext = os.path.splitext(path)[1].lower()
+    if ext in _BINARY_EXTS:
         try:
-            with open(path, "r", encoding="gb18030") as f:
+            from markitdown import MarkItDown
+            md = MarkItDown()
+            result = md.convert(path)
+            if result and result.text_content:
+                return result.text_content
+        except Exception:
+            pass
+        # fallback: return empty so caller knows
+        return ""
+
+    # Plain text: utf-8 → gb18030 → latin-1 cascade
+    for enc in ("utf-8-sig", "utf-8", "gb18030", "latin-1"):
+        try:
+            with open(path, "r", encoding=enc) as f:
                 return f.read()
         except (OSError, UnicodeDecodeError):
-            return ""
+            continue
+    return ""
 
 
 def write_file_safe(path: str, content: str) -> bool:

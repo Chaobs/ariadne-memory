@@ -5,7 +5,33 @@ All notable changes to Ariadne will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.3] - 2026-04-23
+## [0.7.1] - 2026-04-25
+
+### Fixed
+
+#### LLM Wiki — Bug Fixes & UX Improvements
+
+1. **`Initialized Project` / `Save to Recent` 无响应** — `POST /api/wiki/projects/save` 从 query param 改为 JSON body，与前端请求匹配
+2. **`Initialize Wiki` API 422 错误** — 确认 `POST /api/wiki/init` 接受完整的 JSON body，前端请求格式统一
+3. **Project Directory 目录选择器** — 新增服务端文件系统浏览 API `GET /api/wiki/fs/browse`，前端实现 `FsPicker` 弹窗组件，支持目录和文件两种模式，Windows 盘符切换，手动路径输入
+4. **Ingest Source File 文件选择器** — 摄入源文件输入框旁增加 📂 图标，点击打开文件选择器，直接选取文件路径，无需手动输入
+5. **docx/pdf 等二进制格式读取失败** — `read_file_safe()` 新增 markitdown 提取分支，支持 `.docx .doc .pdf .xlsx .pptx .odt .epub` 等 Office/二进制格式，编码四级回退（utf-8-sig → utf-8 → gb18030 → latin-1）
+6. **LLM 401 错误提示** — Ingest 和 Query 失败时检测 401 状态码，显示明确的配置指引（Settings → LLM Configuration）
+7. **帮助按钮** — 标题栏增加 `❓ 帮助` 按钮，弹窗内含完整操作教学（快速开始、LLM 配置、文件格式、Tab 说明、CLI 等价命令）
+8. **Tab 按钮统一样式** — Overview / Ingest / Query / Lint / Pages / Log 六个标签页按钮从 `tab-btn` 改为 `btn-primary`（选中）/ `btn-secondary`（未选中），与页面其余按钮风格一致
+9. **最近项目下拉菜单** — 加载历史 Wiki 项目列表，点击一键切换，并显示条目数
+10. **保存反馈** — Save to Recent 操作完成后显示 ✓ 已保存 / ✗ 保存失败 短暂提示
+
+### Changed
+- `ariadne/web/wiki_api.py` — 新增 `WikiSaveProjectRequest` Pydantic model；新增 `GET /api/wiki/fs/browse` 文件系统浏览端点
+- `ariadne/wiki/builder.py` — `read_file_safe()` 重写，支持 markitdown 提取 Office/PDF 格式，编码四级回退
+- `ariadne/web/frontend/src/pages/Wiki.tsx` — 全面重写（~640 行），整合以上所有改进
+- `ariadne/web/frontend/src/api/ariadne.ts` — 添加 `wikiApi.fsBrowse()` 方法；修复 `saveProject` 请求头
+- `ariadne/web/frontend/src/api/sse.ts` — 将 `sessionId` 通过 `getSessionId()` 公开，修复私有属性访问错误
+- `ariadne/web/frontend/src/components/Observations.tsx` — 修复 `react-i18next` 依赖引用错误；类型导入改为 `import type`
+- `ariadne/web/frontend/src/pages/Session.tsx` — 修复未使用的 `useEffect` 导入
+
+
 
 ### Added
 

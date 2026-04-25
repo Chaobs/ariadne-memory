@@ -6,8 +6,8 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { SSEEvent, ObservationData, SummaryData, getSSEClient, closeSSEClient } from '../api/sse';
-import { useTranslation } from 'react-i18next';
+import { type SSEEvent, type ObservationData, type SummaryData, getSSEClient, closeSSEClient } from '../api/sse';
+import { t } from '../i18n';
 
 // Type colors mapping
 const TYPE_COLORS: Record<string, string> = {
@@ -27,7 +27,6 @@ export const ObservationsPanel: React.FC<ObservationsPanelProps> = ({
   sessionId,
   maxItems = 50,
 }) => {
-  const { t } = useTranslation();
   const [observations, setObservations] = useState<ObservationData[]>([]);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [connected, setConnected] = useState(false);
@@ -106,9 +105,9 @@ export const ObservationsPanel: React.FC<ObservationsPanelProps> = ({
     <div className="observations-panel">
       {/* Header */}
       <div className="observations-header">
-        <h3>{t('observations.title', 'Session Observations')}</h3>
+        <h3>{t('observations.title') || 'Session Observations'}</h3>
         <span className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
-          {connected ? t('observations.connected', 'Live') : t('observations.connecting', 'Connecting...')}
+          {connected ? (t('observations.connected') || 'Live') : (t('observations.connecting') || 'Connecting...')}
         </span>
       </div>
 
@@ -122,11 +121,11 @@ export const ObservationsPanel: React.FC<ObservationsPanelProps> = ({
       {/* Summary section */}
       {summary && (
         <div className="observations-summary">
-          <h4>{t('observations.summary', 'Session Summary')}</h4>
+          <h4>{t('observations.summary') || 'Session Summary'}</h4>
           <p>{summary.narrative}</p>
           {summary.key_decisions && summary.key_decisions.length > 0 && (
             <div className="summary-decisions">
-              <strong>{t('observations.keyDecisions', 'Key Decisions')}:</strong>
+              <strong>{t('observations.keyDecisions') || 'Key Decisions'}:</strong>
               <ul>
                 {summary.key_decisions.map((decision, idx) => (
                   <li key={idx}>{decision}</li>
@@ -141,7 +140,7 @@ export const ObservationsPanel: React.FC<ObservationsPanelProps> = ({
       <div className="observations-list">
         {observations.length === 0 ? (
           <div className="observations-empty">
-            {t('observations.empty', 'No observations yet. Start a session to capture work progress.')}
+            {t('observations.empty') || 'No observations yet. Start a session to capture work progress.'}
           </div>
         ) : (
           observations.map((obs) => (

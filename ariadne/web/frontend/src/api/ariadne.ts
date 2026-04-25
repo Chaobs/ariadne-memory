@@ -528,5 +528,16 @@ export const wikiApi = {
     fetchJSON(`${API_BASE}/wiki/projects/save`, {
       method: 'POST',
       body: JSON.stringify({ project_path: projectPath }),
+      headers: { 'Content-Type': 'application/json' },
     }),
+
+  /** Browse local filesystem (server-side) */
+  fsBrowse: (path = '', mode: 'dir' | 'file' = 'dir') =>
+    fetchJSON<{
+      ok: boolean;
+      current: string;
+      parent: string | null;
+      entries: { name: string; path: string; is_dir: boolean }[];
+      drives: string[];
+    }>(`${API_BASE}/wiki/fs/browse?path=${encodeURIComponent(path)}&mode=${mode}`),
 };

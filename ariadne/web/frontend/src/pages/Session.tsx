@@ -5,7 +5,7 @@
  * including tool usage, user prompts, and generated summaries.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ObservationsPanel, useObservations } from '../components/Observations';
 import { t } from '../i18n';
 

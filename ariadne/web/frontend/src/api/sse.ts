@@ -50,6 +50,11 @@ export class SSEClient {
     this.sessionId = sessionId;
   }
 
+  /** Expose sessionId for comparison in getSSEClient */
+  getSessionId(): string | null {
+    return this.sessionId;
+  }
+
   /**
    * Connect to SSE endpoint
    */
@@ -192,7 +197,7 @@ let globalSSEClient: SSEClient | null = null;
 export function getSSEClient(sessionId?: string): SSEClient {
   if (!globalSSEClient) {
     globalSSEClient = new SSEClient(sessionId || null);
-  } else if (sessionId && globalSSEClient.sessionId !== sessionId) {
+  } else if (sessionId && globalSSEClient.getSessionId() !== sessionId) {
     // Session changed, need new connection
     globalSSEClient.disconnect();
     globalSSEClient = new SSEClient(sessionId);
