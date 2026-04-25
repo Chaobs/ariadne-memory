@@ -5,6 +5,20 @@ All notable changes to Ariadne will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-04-25
+
+### Fixed
+
+#### Web Server Graceful Shutdown (Windows)
+
+- **CMD 窗口关闭后端进程残留** — 当运行 Web 后端的 CMD 窗口被关闭（点击 X 按钮/Alt+F4/系统关机）时，Python 进程被操作系统立即终止，uvicorn 子进程残留并持续占用端口
+- **修复方案**: 在 `run_server` 中注册 Windows 控制台事件处理器（`SetConsoleCtrlHandler`）拦截 `CTRL_CLOSE_EVENT` 和 `CTRL_SHUTDOWN_EVENT`，配合 `atexit.register` 和 Unix `SIGTERM/SIGINT` 信号处理器，实现三层保护：
+  1. **Windows 控制台事件** → `_windows_ctrl_handler` → `_graceful_shutdown` → `kernel32.ExitProcess(1)`
+  2. **Unix 信号** → `_unix_signal` → `_graceful_shutdown` → `session_log.shutdown()`
+  3. **atexit fallback** → `_graceful_shutdown`（覆盖 signal handler 未捕获的退出路径）
+- 修复后关闭 CMD 窗口时，后端进程树被完整清理，端口自动释放，无需手动 `taskkill` 或等待超时
+- `ariadne/web/api.py` — `run_server` 函数重写，新增 `_graceful_shutdown` / `_windows_ctrl_handler` / `_unix_signal`
+
 ## [0.7.1] - 2026-04-25
 
 ### Fixed

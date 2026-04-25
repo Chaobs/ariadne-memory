@@ -1608,11 +1608,61 @@ class SPAStaticFiles(StaticFiles):
             raise
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8770, reload: bool = False):
-    """Run the Ariadne web server."""
-    import uvicorn
+def _graceful_shutdown(signum=None, frame=None):
+    """Gracefully shut down the web server.
 
-    # Start session logging
+    Handles:
+    - Windows CMD window close (CTRL_CLOSE_EVENT)
+    - Windows system shutdown (CTRL_SHUTDOWN_EVENT)
+    - Unix SIGTERM / SIGINT
+    - atexit calls
+    This ensures all child processes (uvicorn workers) are killed, preventing
+    orphaned processes from occupying the port after the terminal closes.
+    """
+    import sys
+    import time
+
+    sig_name = getattr(signal, "SIGTERM", None)
+    if signum is not None:
+        for _name, val in signal.__dict__.items():
+            if val == signum and _name.startswith("SIG"):
+                sig_name = _name
+                break
+    session_log = get_session_logger()
+    session_log.info("server_shutdown_requested", signal=sig_name or "atexit")
+
+    # Give uvicorn a moment to clean up its workers
+    time.sleep(0.5)
+
+    try:
+        session_log.shutdown()
+    except Exception:
+        pass  # Logger may already be shut down
+
+    # On Windows: forcibly terminate the process so the OS doesn't do a hard kill
+    # after our handler returns. Exit code 1 = abnormal termination.
+    if sys.platform == "win32":
+        import ctypes, os
+        kernel32 = ctypes.windll.kernel32
+        kernel32.ExitProcess(1)
+
+
+def run_server(host: str = "127.0.0.1", port: int = 8770, reload: bool = False):
+    """Run the Ariadne web server.
+
+    On Windows, pressing the X button (or closing the CMD window) triggers
+    a CTRL_CLOSE_EVENT. Without a handler, the process is killed immediately
+    and uvicorn child processes remain orphaned, occupying the port.
+
+    This function registers both Windows console control handlers and atexit
+    so that closing the terminal triggers a graceful shutdown that kills all
+    child processes cleanly.
+    """
+    import atexit
+    import signal
+    import sys
+
+    # Store logger reference so _graceful_shutdown can access it
     session_log = get_session_logger()
     session_log.start("web", host=host, port=port, version=__version__)
 
@@ -1622,17 +1672,57 @@ def run_server(host: str = "127.0.0.1", port: int = 8770, reload: bool = False):
     if loaded:
         session_log.info("plugins_loaded", count=len(loaded), names=loaded)
 
+    # ── Windows console control handler ────────────────────────────────────────
+    if sys.platform == "win32":
+        import ctypes
+
+        # Typedef for the handler callback
+        HANDLER_ROUTINE = ctypes.WINFUNCTYPE(
+            ctypes.c_int, ctypes.c_int
+        )
+
+        def _windows_ctrl_handler(ctrl_type):
+            """
+            Windows console control handler.
+
+            Called when the console window is closed (X button, Alt+F4, system shutdown).
+            Returning True (True/1) means "handle this event ourselves", which
+            prevents the default console host from killing the process.
+            We then call ExitProcess ourselves via _graceful_shutdown.
+            """
+            _graceful_shutdown(signum=ctrl_type)
+            # Never return here — _graceful_shutdown calls ExitProcess on Windows
+            return True  # tell Windows we handled it
+
+        kernel32 = ctypes.windll.kernel32
+        # Register our handler
+        kernel32.SetConsoleCtrlHandler(HANDLER_ROUTINE(_windows_ctrl_handler), True)
+        session_log.info("windows_ctrl_handler_registered")
+
+    # ── Unix signal handlers ────────────────────────────────────────────────────
+    else:
+        def _unix_signal(signum, frame):
+            _graceful_shutdown(signum=signum, frame=frame)
+
+        signal.signal(signal.SIGTERM, _unix_signal)
+        signal.signal(signal.SIGINT,  _unix_signal)
+        session_log.info("unix_signal_handlers_registered")
+
+    # ── atexit fallback ─────────────────────────────────────────────────────────
+    # Catches everything that signal handlers miss (e.g. os._exit, fatal errors)
+    atexit.register(_graceful_shutdown)
+
+    # ── Run uvicorn ───────────────────────────────────────────────────────────
+    import uvicorn
+
     static_dir = Path(__file__).parent / "static"
-    try:
-        if static_dir.exists():
-            app = create_app()
-            # SPAStaticFiles: serves static assets + index.html fallback for SPA routing
-            app.mount("/", SPAStaticFiles(directory=str(static_dir), html=True), name="static")
-            session_log.info("server_start", mode="spa", static_dir=str(static_dir))
-            uvicorn.run(app, host=host, port=port)
-        else:
-            # API-only mode (frontend not built yet)
-            session_log.info("server_start", mode="api_only")
-            uvicorn.run("ariadne.web.api:create_app", host=host, port=port, reload=reload, factory=True)
-    finally:
-        session_log.shutdown()
+    if static_dir.exists():
+        app = create_app()
+        # SPAStaticFiles: serves static assets + index.html fallback for SPA routing
+        app.mount("/", SPAStaticFiles(directory=str(static_dir), html=True), name="static")
+        session_log.info("server_start", mode="spa", static_dir=str(static_dir))
+        uvicorn.run(app, host=host, port=port)
+    else:
+        # API-only mode (frontend not built yet)
+        session_log.info("server_start", mode="api_only")
+        uvicorn.run("ariadne.web.api:create_app", host=host, port=port, reload=reload, factory=True)
