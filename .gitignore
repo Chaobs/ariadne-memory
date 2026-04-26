@@ -75,3 +75,20 @@ config.json
 .ariadne/
 # (Keep config.sample.json as template)
 
+# LLM Wiki user project directories (generated at runtime, not project source)
+# Users create these with: ariadne wiki init <path>
+# They are personal data, like ariadne_data/ and .ariadne/
+wiki/
+raw/
+testwiki/
+
+# One-off development scripts (not part of the package)
+export_wiki.py
+setup_wiki.py
+
+# Wiki export artifacts
+docs/wiki-export/
+docs/wiki-clone/
+docs/wiki/
+
+
