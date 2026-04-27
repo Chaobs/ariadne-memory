@@ -8,14 +8,14 @@ import { setLocale, LOCALES, t, type Locale } from '../i18n';
 
 // Flag image map — PNG files in /assets/flags/, 24x24px
 const FLAG_MAP: Record<string, string> = {
-  en: '/assets/flags/en.png',
-  zh_CN: '/assets/flags/zh_CN.png',
-  zh_TW: '/assets/flags/zh_TW.png',
-  ja: '/assets/flags/ja.png',
-  fr: '/assets/flags/fr.png',
-  es: '/assets/flags/es.png',
-  ru: '/assets/flags/ru.png',
-  ar: '/assets/flags/ar.png',
+  en: '/assets/flags/en.png?v=0.7.2',
+  zh_CN: '/assets/flags/zh_CN.png?v=0.7.2',
+  zh_TW: '/assets/flags/zh_TW.png?v=0.7.2',
+  ja: '/assets/flags/ja.png?v=0.7.2',
+  fr: '/assets/flags/fr.png?v=0.7.2',
+  es: '/assets/flags/es.png?v=0.7.2',
+  ru: '/assets/flags/ru.png?v=0.7.2',
+  ar: '/assets/flags/ar.png?v=0.7.2',
 };
 
 export default function Settings() {
