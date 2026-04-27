@@ -1,6 +1,19 @@
 /**
  * D3Graph — Interactive knowledge graph visualization
  * Features: zoom/pan/drag, type filtering, node search, highlighting, PNG export
+ *
+ * BUG FIX (v0.7.3): Nodes were jumping/resetting whenever searchQuery,
+ * highlightedNodeId, or onNodeHighlight changed, because those values were all
+ * in the D3 useEffect dependency array, causing the entire simulation to be
+ * torn down and rebuilt on every keystroke or click.
+ *
+ * Fix strategy:
+ * 1. The "build simulation" effect ONLY depends on [data] so the physics
+ *    simulation is only recreated when the graph data actually changes.
+ * 2. searchQuery filtering is applied by toggling node/edge visibility (opacity
+ *    + pointer-events) in a separate effect that does NOT touch the simulation.
+ * 3. highlightedNodeId styling (color, size) is applied in its own effect.
+ * 4. onNodeHighlight is stored in a ref so its identity never causes re-renders.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -75,6 +88,16 @@ export default function D3Graph({
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphEdge> | null>(null);
+  // Store D3 selections in refs so secondary effects can update them
+  // without needing to re-run the simulation-building effect.
+  const nodeSelRef = useRef<d3.Selection<SVGGElement, GraphNode, SVGGElement, unknown> | null>(null);
+  const linkSelRef = useRef<d3.Selection<SVGLineElement, GraphEdge, SVGGElement, unknown> | null>(null);
+  const edgeLabelSelRef = useRef<d3.Selection<SVGTextElement, GraphEdge, SVGGElement, unknown> | null>(null);
+
+  // Keep onNodeHighlight in a ref — its identity should never affect effects.
+  const onNodeHighlightRef = useRef(onNodeHighlight);
+  useEffect(() => { onNodeHighlightRef.current = onNodeHighlight; }, [onNodeHighlight]);
+
   const [data, setData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -94,7 +117,7 @@ export default function D3Graph({
     loadGraph();
   }, [loadGraph]);
 
-  // Handle PNG export event
+  // ── PNG export ─────────────────────────────────────────────────────────────
   useEffect(() => {
     function handleExportPNG() {
       if (!svgRef.current) return;
@@ -124,7 +147,11 @@ export default function D3Graph({
     return () => window.removeEventListener('graph:export-png', handleExportPNG);
   }, []);
 
-  // D3 visualization
+  // ── BUILD SIMULATION — only when graph data changes ────────────────────────
+  // IMPORTANT: searchQuery, highlightedNodeId, and onNodeHighlight are
+  // intentionally NOT in this dependency array.  Those values are handled by
+  // separate, lightweight effects below that update visual attributes only,
+  // without tearing down the simulation.
   useEffect(() => {
     if (!data || !svgRef.current || !containerRef.current) return;
 
@@ -138,22 +165,10 @@ export default function D3Graph({
       simulationRef.current.stop();
     }
 
-    // Filter nodes by search query
-    let displayNodes: GraphNode[] = data.nodes.map(n => ({ ...n }));
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      displayNodes = displayNodes.filter(n =>
-        n.label.toLowerCase().includes(q) ||
-        n.type.toLowerCase().includes(q)
-      );
-    }
-
-    const nodeIds = new Set(displayNodes.map(n => n.id));
-    const displayEdges: GraphEdge[] = data.edges.filter(e => {
-      const src = typeof e.source === 'string' ? e.source : e.source.id;
-      const tgt = typeof e.target === 'string' ? e.target : e.target.id;
-      return nodeIds.has(src) && nodeIds.has(tgt);
-    });
+    // All nodes participate in the simulation; searchQuery filtering is handled
+    // visually via opacity in a separate effect.
+    const displayNodes: GraphNode[] = data.nodes.map(n => ({ ...n }));
+    const displayEdges: GraphEdge[] = data.edges.map(e => ({ ...e }));
 
     if (displayNodes.length === 0) return;
 
@@ -237,10 +252,18 @@ export default function D3Graph({
     // Node groups
     const node = g.append('g')
       .attr('class', 'nodes')
-      .selectAll('g')
+      .selectAll<SVGGElement, GraphNode>('g')
       .data(displayNodes)
       .join('g')
       .attr('cursor', 'pointer');
+
+    // Store selections in refs for secondary effects
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    nodeSelRef.current = node as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    linkSelRef.current = link as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    edgeLabelSelRef.current = edgeLabel as any;
 
     // Drag behavior
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -262,15 +285,12 @@ export default function D3Graph({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     node.call(dragBehavior as any);
 
-    // Node circles
+    // Node circles — default (un-highlighted) style
     node.append('circle')
-      .attr('r', d => highlightedNodeId === d.id ? 22 : (d.type ? 16 : 12))
-      .attr('fill', d => {
-        if (highlightedNodeId === d.id) return '#4CAF50';
-        return NODE_COLORS[d.type?.toUpperCase()] || NODE_COLORS.DEFAULT;
-      })
-      .attr('stroke', d => highlightedNodeId === d.id ? '#2E7D32' : '#fff')
-      .attr('stroke-width', d => highlightedNodeId === d.id ? 3 : 2)
+      .attr('r', d => d.type ? 16 : 12)
+      .attr('fill', d => NODE_COLORS[d.type?.toUpperCase()] || NODE_COLORS.DEFAULT)
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 2)
       .attr('filter', 'url(#shadow)');
 
     // Node emoji labels
@@ -282,48 +302,45 @@ export default function D3Graph({
 
     // Node text labels
     node.append('text')
+      .attr('class', 'node-label')
       .attr('text-anchor', 'middle')
       .attr('dy', 32)
       .attr('font-size', 11)
-      .attr('font-weight', d => highlightedNodeId === d.id ? 'bold' : '500')
-      .attr('fill', d => highlightedNodeId === d.id ? '#1a1a1a' : '#333')
-      .text(d => {
-        const label = d.label.length > 20 ? d.label.slice(0, 18) + '…' : d.label;
-        return searchQuery && label.toLowerCase().includes(searchQuery.toLowerCase())
-          ? label
-          : label;
-      })
+      .attr('font-weight', '500')
+      .attr('fill', '#333')
+      .text(d => d.label.length > 20 ? d.label.slice(0, 18) + '…' : d.label)
       .attr('paint-order', 'stroke')
       .attr('stroke', '#fafafa')
       .attr('stroke-width', 3);
 
     // Highlight connected edges when a node is hovered
     node.on('mouseover', function(_event, d) {
-      // Highlight connected edges
       link.attr('stroke', e => {
-        const src = typeof e.source === 'string' ? e.source : e.source.id;
-        const tgt = typeof e.target === 'string' ? e.target : e.target.id;
+        const src = typeof e.source === 'string' ? e.source : (e.source as GraphNode).id;
+        const tgt = typeof e.target === 'string' ? e.target : (e.target as GraphNode).id;
         return (src === d.id || tgt === d.id) ? '#4CAF50' : '#ccc';
       }).attr('stroke-width', e => {
-        const src = typeof e.source === 'string' ? e.source : e.source.id;
-        const tgt = typeof e.target === 'string' ? e.target : e.target.id;
+        const src = typeof e.source === 'string' ? e.source : (e.source as GraphNode).id;
+        const tgt = typeof e.target === 'string' ? e.target : (e.target as GraphNode).id;
         return (src === d.id || tgt === d.id) ? 2.5 : 1.5;
       });
-      // Enlarge node
       d3.select(this).select('circle')
         .transition().duration(150)
         .attr('r', 20);
     }).on('mouseout', function(_event, d) {
       link.attr('stroke', '#ccc').attr('stroke-width', 1.5);
+      // Restore to the current highlighted radius (read from data attribute
+      // set by the highlight effect, falling back to default).
+      const isHighlighted = (d as GraphNode & { _highlighted?: boolean })._highlighted;
       d3.select(this).select('circle')
         .transition().duration(150)
-        .attr('r', highlightedNodeId === d.id ? 22 : (d.type ? 16 : 12));
+        .attr('r', isHighlighted ? 22 : (d.type ? 16 : 12));
     });
 
-    // Click handler — highlight connected nodes
+    // Click handler
     node.on('click', (_event, d) => {
       setSelectedNode(d);
-      onNodeHighlight?.(d.id);
+      onNodeHighlightRef.current?.(d.id);
     });
 
     // Tick
@@ -343,8 +360,80 @@ export default function D3Graph({
 
     return () => {
       simulation.stop();
+      nodeSelRef.current = null;
+      linkSelRef.current = null;
+      edgeLabelSelRef.current = null;
     };
-  }, [data, searchQuery, highlightedNodeId, onNodeHighlight]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);  // ← ONLY data; search/highlight handled by dedicated effects below
+
+  // ── SEARCH FILTER — update node/edge visibility only ─────────────────────
+  // Does NOT touch the simulation — nodes keep their positions.
+  useEffect(() => {
+    const node = nodeSelRef.current;
+    const link = linkSelRef.current;
+    const edgeLabel = edgeLabelSelRef.current;
+    if (!node) return;
+
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) {
+      // Show everything
+      node.attr('opacity', 1).attr('pointer-events', 'all');
+      link?.attr('opacity', 1);
+      edgeLabel?.attr('opacity', 1);
+      return;
+    }
+
+    // Dim nodes that don't match; highlight matching ones
+    const matchingIds = new Set<string>();
+    node.each(d => {
+      if (d.label.toLowerCase().includes(q) || d.type.toLowerCase().includes(q)) {
+        matchingIds.add(d.id);
+      }
+    });
+
+    node
+      .attr('opacity', d => matchingIds.has(d.id) ? 1 : 0.15)
+      .attr('pointer-events', d => matchingIds.has(d.id) ? 'all' : 'none');
+
+    link?.attr('opacity', e => {
+      const src = typeof e.source === 'string' ? e.source : (e.source as GraphNode).id;
+      const tgt = typeof e.target === 'string' ? e.target : (e.target as GraphNode).id;
+      return (matchingIds.has(src) && matchingIds.has(tgt)) ? 1 : 0.05;
+    });
+
+    edgeLabel?.attr('opacity', e => {
+      const src = typeof e.source === 'string' ? e.source : (e.source as GraphNode).id;
+      const tgt = typeof e.target === 'string' ? e.target : (e.target as GraphNode).id;
+      return (matchingIds.has(src) && matchingIds.has(tgt)) ? 1 : 0;
+    });
+  }, [searchQuery]);
+
+  // ── HIGHLIGHT STYLE — update node colors/sizes only ──────────────────────
+  // Does NOT touch the simulation — nodes keep their positions.
+  useEffect(() => {
+    const node = nodeSelRef.current;
+    if (!node) return;
+
+    node.each(function(d) {
+      const g = d3.select(this);
+      const isHighlighted = highlightedNodeId === d.id;
+      // Attach flag for mouseout handler
+      (d as GraphNode & { _highlighted?: boolean })._highlighted = isHighlighted;
+
+      g.select('circle')
+        .attr('r', isHighlighted ? 22 : (d.type ? 16 : 12))
+        .attr('fill', isHighlighted
+          ? '#4CAF50'
+          : (NODE_COLORS[d.type?.toUpperCase()] || NODE_COLORS.DEFAULT))
+        .attr('stroke', isHighlighted ? '#2E7D32' : '#fff')
+        .attr('stroke-width', isHighlighted ? 3 : 2);
+
+      g.select('text.node-label')
+        .attr('font-weight', isHighlighted ? 'bold' : '500')
+        .attr('fill', isHighlighted ? '#1a1a1a' : '#333');
+    });
+  }, [highlightedNodeId]);
 
   return (
     <div className="d3-graph-wrapper">

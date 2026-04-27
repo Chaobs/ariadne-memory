@@ -5,6 +5,22 @@ All notable changes to Ariadne will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-04-27
+
+### Fixed
+
+#### Knowledge Graph — Node Jumping Bug
+
+- **节点乱动根因**: `D3Graph.tsx` 的 D3 `useEffect` 依赖数组包含了 `searchQuery`、`highlightedNodeId`、`onNodeHighlight`，导致每次在文本框打字、点击节点、或父组件因 `setShowExportMenu` 重渲染时，整个 forceSimulation 被完全销毁并重建，所有节点位置被随机初始化
+- **修复方案 — 三个独立 effect**：
+  1. **Build Simulation effect** — 依赖仅 `[data]`，只有图数据真正变化（刷新/切换 maxNodes/filterType）时才重建物理模拟
+  2. **Search Filter effect** — 依赖 `[searchQuery]`，通过设置 `opacity` 和 `pointer-events` 控制节点/边的可见性，**不触碰 simulation**
+  3. **Highlight Style effect** — 依赖 `[highlightedNodeId]`，仅更新节点颜色/大小属性，**不触碰 simulation**
+- **`onNodeHighlight` ref 化** — 用 `useRef` 保存回调引用，避免父组件每次 re-render 产生的新函数引用污染 effect
+- **`handleNodeHighlight` useCallback 化** — `Graph.tsx` 父组件将 `handleNodeHighlight` 包装为 `useCallback`，稳定引用
+- 修复后：打字搜索/点击节点/点击 Export 按钮均不再重置节点位置；PNG 导出图像完整正确
+- 变更文件：`ariadne/web/frontend/src/components/D3Graph.tsx`、`ariadne/web/frontend/src/pages/Graph.tsx`、`ariadne/web/static/assets/`（重新构建）
+
 ## [0.7.2] - 2026-04-25
 
 ### Fixed

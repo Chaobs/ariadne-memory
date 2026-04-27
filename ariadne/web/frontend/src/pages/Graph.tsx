@@ -2,7 +2,7 @@
  * Graph — Knowledge graph visualization + enrichment + export
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { graphApi } from '../api/ariadne';
 import D3Graph from '../components/D3Graph';
 import { t } from '../i18n';
@@ -53,9 +53,9 @@ export default function Graph() {
     graphApi.downloadExport(format, 200, 'Knowledge Graph Export');
   }
 
-  function handleNodeHighlight(nodeId: string | null) {
+  const handleNodeHighlight = useCallback((nodeId: string | null) => {
     setHighlightedNode(nodeId);
-  }
+  }, []);
 
   async function handleEntityQuery(e: React.FormEvent) {
     e.preventDefault();
