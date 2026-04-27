@@ -9,11 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-#### Language Selector — Flag Icons Missing
+#### Language Selector — Restore Flag PNG Files
 
-- **问题**: `Settings.tsx` 的语言选项引用 `/assets/flags/*.png` 路径，但源目录 `public/` 中从未存在这些文件，导致所有国旗图片无法显示
-- **修复**: 改用 `i18n.ts` 中 `LOCALES` 已有的 emoji 国旗（🇺🇸🇨🇳🇭🇰🇯🇵🇫🇷🇪🇸🇷🇺🇸🇦），不依赖任何外部图片文件，同时保留 `FLAG_FALLBACK` 作为备用映射
-- **变更文件**: `ariadne/web/frontend/src/pages/Settings.tsx`
+- **问题根因**: `da11a32` 提交 Graph BUG 修复时，执行 `npm run build` 后用 `Copy-Item dist/ static/ -Recurse` 覆盖了整个 `static/` 目录，导致 `dcbcc14` 提交的 8 个 flag PNG 文件被静默删除
+- **修复**: 从 `da11a32^` 恢复 flags PNG 文件；`Settings.tsx` 还原为 PNG 引用；构建产物选择性复制（不再整体覆盖 `static/`）
+- **重建静态文件**: 8 个 flag PNG（en/zh_CN/zh_TW/ja/fr/es/ru/ar）+ `index-Ct38wx4u.js`（Graph BUG fix 版本）
+- **变更文件**: `ariadne/web/frontend/src/pages/Settings.tsx`、`ariadne/web/static/assets/flags/*.png`、`ariadne/web/static/assets/index-Ct38wx4u.js`、`ariadne/web/static/index.html`
 
 #### Knowledge Graph — Node Jumping Bug
 
