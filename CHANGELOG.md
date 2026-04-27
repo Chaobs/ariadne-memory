@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+#### Language Selector — Flag Icons Missing
+
+- **问题**: `Settings.tsx` 的语言选项引用 `/assets/flags/*.png` 路径，但源目录 `public/` 中从未存在这些文件，导致所有国旗图片无法显示
+- **修复**: 改用 `i18n.ts` 中 `LOCALES` 已有的 emoji 国旗（🇺🇸🇨🇳🇭🇰🇯🇵🇫🇷🇪🇸🇷🇺🇸🇦），不依赖任何外部图片文件，同时保留 `FLAG_FALLBACK` 作为备用映射
+- **变更文件**: `ariadne/web/frontend/src/pages/Settings.tsx`
+
 #### Knowledge Graph — Node Jumping Bug
 
 - **节点乱动根因**: `D3Graph.tsx` 的 D3 `useEffect` 依赖数组包含了 `searchQuery`、`highlightedNodeId`、`onNodeHighlight`，导致每次在文本框打字、点击节点、或父组件因 `setShowExportMenu` 重渲染时，整个 forceSimulation 被完全销毁并重建，所有节点位置被随机初始化
