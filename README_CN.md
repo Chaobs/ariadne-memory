@@ -38,6 +38,7 @@
 | 🔗 **知识图谱** | 自动识别实体与关系，带交互式 D3 可视化，支持时间线 | ✅ |
 | 🧠 **记忆持久化** | ChromaDB 本地存储，支持多记忆系统、导出/导入、4层记忆栈 | ✅ |
 | 🤖 **AI 增强** | MCP Server 支持 Claude Code/WorkBuddy/Cursor，Skill 集成，5钩子生命周期，自动保存钩子 | ✅ |
+| 🔄 **实时 AI 代理记忆向量化** | 自动实时向量化 AI 代理对话记忆（如 WorkBuddy MEMORY.md），提供 CLI、Web UI、MCP 三种接口 | ✅ |
 | 📖 **LLM Wiki** | Karpathy 风格持久化知识库，两步链式思考摄入、问答、整洁检查、Obsidian 导入 | ✅ |
 | 🌍 **多语言** | 支持 8 种语言（中文简繁体、日语、英、法、西、俄、阿），完整界面本地化 | ✅ |
 | 🖥️ **双界面** | CLI（Typer + Rich）+ Web UI（React + FastAPI），功能完全对齐 | ✅ |

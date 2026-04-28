@@ -42,6 +42,7 @@ from ariadne import __version__
 from ariadne.memory import VectorStore, MemoryManager, get_manager
 from ariadne.ingest import get_ingestor
 from ariadne.ingest.markitdown_ingestor import MarkItDownIngestor
+from ariadne.realtime import RealtimeVectorizer
 from ariadne.config import (
     AriadneConfig,
     get_config,
@@ -313,6 +314,177 @@ def memory_import(
     except ValueError as e:
         console.print(f"[bold red][ERROR][/bold red] {e}")
         raise typer.Exit(1)
+
+
+# ═══════════════════════════════════════════
+# Real-time Vectorization
+# ═══════════════════════════════════════════
+
+@memory_app.command("watch")
+def memory_watch(
+    directories: List[str] = typer.Argument(..., help="Directories to watch for memory files"),
+    recursive: bool = typer.Option(True, "--recursive/--no-recursive", "-r/", help="Watch subdirectories recursively"),
+    patterns: Optional[List[str]] = typer.Option(None, "--pattern", "-p", help="File patterns to watch (e.g., '*.md')"),
+    debounce: float = typer.Option(2.0, "--debounce", "-d", help="Debounce interval in seconds"),
+    memory_system: str = typer.Option("default", "--memory", "-m", help="Target memory system name"),
+):
+    """Start watching directories for AI agent memory files and ingest them in real-time.
+    
+    Example:
+        ariadne memory watch ./workbuddy_memories ./openclaw_logs --pattern "*.md" --pattern "MEMORY.md"
+    """
+    from ariadne.realtime import RealtimeVectorizer
+    
+    vectorizer = RealtimeVectorizer(default_memory_system=memory_system)
+    
+    if patterns:
+        vectorizer.watch_patterns = patterns
+    
+    if vectorizer.start_watching(directories, recursive=recursive):
+        console.print("[bold green][OK][/bold green] Started watching directories:")
+        for dir in directories:
+            console.print(f"  • {dir}")
+        console.print("\nPress Ctrl+C to stop watching...")
+        
+        try:
+            # Keep the watcher running
+            import time
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            console.print("\n[bold yellow]Stopping watcher...[/bold yellow]")
+            vectorizer.stop_watching()
+            console.print("[bold green]Watcher stopped.[/bold green]")
+    else:
+        console.print("[bold red][ERROR][/bold red] Failed to start watching")
+        raise typer.Exit(1)
+
+
+@memory_app.command("ingest-observation")
+def memory_ingest_observation(
+    path: str = typer.Argument(..., help="Memory file or directory to ingest", exists=True),
+    recursive: bool = typer.Option(False, "--recursive", "-r", help="Recursively ingest all matching files"),
+    pattern: str = typer.Option("*.md", "--pattern", "-p", help="File pattern to match"),
+    create_observations: bool = typer.Option(True, "--observations/--no-observations", help="Create observation records"),
+    ingest_documents: bool = typer.Option(True, "--documents/--no-documents", help="Ingest as documents into vector storage"),
+    memory_system: str = typer.Option("default", "--memory", "-m", help="Target memory system name"),
+):
+    """Manually ingest AI agent memory files as observations and documents.
+    
+    Example:
+        ariadne memory ingest-observation ./MEMORY.md
+        ariadne memory ingest-observation ./logs --recursive --pattern "*.json"
+    """
+    from ariadne.realtime import RealtimeVectorizer
+    
+    vectorizer = RealtimeVectorizer(default_memory_system=memory_system)
+    
+    if Path(path).is_file():
+        observations, doc_ids = vectorizer.ingest_file(
+            path,
+            create_observations=create_observations,
+            ingest_as_documents=ingest_documents,
+        )
+        console.print(f"[bold green][OK][/bold green] Ingested file: {path}")
+        console.print(f"  • Observations created: {len(observations)}")
+        console.print(f"  • Documents ingested: {len(doc_ids)}")
+    else:
+        observations, doc_ids = vectorizer.ingest_directory(
+            path,
+            pattern=pattern,
+            recursive=recursive,
+            create_observations=create_observations,
+            ingest_as_documents=ingest_documents,
+        )
+        console.print(f"[bold green][OK][/bold green] Ingested directory: {path}")
+        console.print(f"  • Observations created: {len(observations)}")
+        console.print(f"  • Documents ingested: {len(doc_ids)}")
+
+
+@memory_app.command("realtime-status")
+def memory_realtime_status(
+    memory_system: Optional[str] = typer.Option(None, "--memory", "-m", help="Memory system name"),
+):
+    """Show status of real-time vectorization.
+    
+    Example:
+        ariadne memory realtime-status
+    """
+    from ariadne.realtime import RealtimeVectorizer
+    
+    vectorizer = RealtimeVectorizer(default_memory_system=memory_system or "default")
+    status = vectorizer.get_status()
+    
+    table = Table(title="Real-time Vectorization Status", show_lines=False)
+    table.add_column("Property", style="bold cyan")
+    table.add_column("Value", style="green")
+    
+    table.add_row("Is Watching", "Yes" if status["is_watching"] else "No")
+    table.add_row("Watched Directories", str(len(status["watch_directories"])))
+    if status["watch_directories"]:
+        for dir in status["watch_directories"]:
+            table.add_row("", f"  • {dir}")
+    table.add_row("Default Memory System", status["default_memory_system"])
+    table.add_row("Watch Patterns", ", ".join(status["watch_patterns"]))
+    table.add_row("Debounce Seconds", str(status["debounce_seconds"]))
+    
+    # Statistics
+    stats = status["stats"]
+    table.add_row("Files Processed", str(stats["files_processed"]))
+    table.add_row("Observations Created", str(stats["observations_created"]))
+    table.add_row("Documents Ingested", str(stats["documents_ingested"]))
+    table.add_row("Last Processed", stats["last_processed"] or "Never")
+    table.add_row("Start Time", stats["start_time"])
+    
+    console.print(table)
+
+
+@memory_app.command("realtime-config")
+def memory_realtime_config(
+    memory_system: Optional[str] = typer.Option(None, "--memory", "-m", help="Set default memory system"),
+    patterns: Optional[List[str]] = typer.Option(None, "--pattern", "-p", help="Set watch patterns"),
+    debounce: Optional[float] = typer.Option(None, "--debounce", "-d", help="Set debounce interval in seconds"),
+    show: bool = typer.Option(False, "--show", "-s", help="Show current configuration"),
+):
+    """Configure real-time vectorization settings.
+    
+    Example:
+        ariadne memory realtime-config --show
+        ariadne memory realtime-config --memory my_memory --pattern "*.md" --pattern "*.json"
+    """
+    from ariadne.realtime import RealtimeVectorizer
+    
+    vectorizer = RealtimeVectorizer()
+    
+    if show:
+        config = vectorizer.get_config()
+        table = Table(title="Real-time Vectorization Configuration", show_lines=False)
+        table.add_column("Setting", style="bold cyan")
+        table.add_column("Value", style="green")
+        
+        table.add_row("Default Memory System", config["default_memory_system"])
+        table.add_row("Watch Patterns", ", ".join(config["watch_patterns"]))
+        table.add_row("Debounce Seconds", str(config["debounce_seconds"]))
+        
+        console.print(table)
+        return
+    
+    updates = {}
+    if memory_system:
+        updates["default_memory_system"] = memory_system
+    if patterns:
+        updates["watch_patterns"] = patterns
+    if debounce is not None:
+        updates["debounce_seconds"] = debounce
+    
+    if updates:
+        if vectorizer.update_config(**updates):
+            console.print("[bold green][OK][/bold green] Configuration updated")
+        else:
+            console.print("[bold red][ERROR][/bold red] Failed to update configuration")
+            raise typer.Exit(1)
+    else:
+        console.print("[bold yellow]No configuration changes specified. Use --show to view current config.[/bold yellow]")
 
 
 # ═══════════════════════════════════════════

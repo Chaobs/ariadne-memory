@@ -40,6 +40,7 @@
 | 🔗 **Knowledge Graph** | Auto-identify entities and relationships with interactive D3 visualization, temporal support | ✅ |
 | 🧠 **Persistent Memory** | ChromaDB local storage with multiple memory systems, export/import, 4-layer memory stack | ✅ |
 | 🤖 **AI Enhancement** | MCP Server for Claude Code/WorkBuddy/Cursor, Skill integration, 5-hook lifecycle, auto-save hooks | ✅ |
+| 🔄 **Real-time Agent Memory Vectorization** | Automatically vectorize AI agent conversation memories (e.g., WorkBuddy MEMORY.md) in real-time, with CLI, Web UI, and MCP interfaces | ✅ |
 | 📖 **LLM Wiki** | Karpathy-style persistent wiki with two-step CoT ingest, Q&A, lint, Obsidian import | ✅ |
 | 🌍 **Multi-language** | Supports 8 languages (zh_CN/zh_TW/ja/en/fr/es/ru/ar) with full UI localization | ✅ |
 | 🖥️ **Dual Interface** | CLI (Typer + Rich) + Web UI (React + FastAPI), both with full feature parity | ✅ |
@@ -216,6 +217,10 @@ for doc, score in results:
 | `memory merge` | Merge systems | `ariadne memory merge a b --into new` |
 | `memory export` | Export system | `ariadne memory export research ./backup/` |
 | `memory import` | Import system | `ariadne memory import ./backup/ imported` |
+| `memory watch` | Start real-time monitoring of agent memory directories | `ariadne memory watch /path/to/memory/dir` |
+| `memory ingest-observation` | Manually ingest an agent memory file | `ariadne memory ingest-observation /path/to/MEMORY.md` |
+| `memory realtime-status` | Show real-time vectorization status | `ariadne memory realtime-status` |
+| `memory realtime-config` | Configure real-time vectorization settings | `ariadne memory realtime-config --platform workbuddy` |
 | `config show` | Show config | `ariadne config show` |
 | `config set` | Set config | `ariadne config set llm.provider deepseek` |
 | `config test` | Test LLM | `ariadne config test` |
@@ -306,6 +311,11 @@ ariadne/
 │   ├── wal.py             # WAL Audit Logger
 │   ├── validation.py      # Schema Validation
 │   └── cache.py           # Cache Invalidation Detection
+├── realtime/               # Real-time agent memory vectorization
+│   ├── __init__.py         # Public API (ObservationIngestor, FileWatcher, RealtimeVectorizer)
+│   ├── ingestor.py        # ObservationIngestor: parse agent memory files
+│   ├── watcher.py         # FileWatcher: monitor directories for new files
+│   └── vectorizer.py      # RealtimeVectorizer: coordinate ingestion and watching
 ├── web/                    # Web UI (React + FastAPI)
 │   ├── api.py              # FastAPI REST API (20+ endpoints)
 │   ├── __init__.py         # Web entry point
@@ -568,7 +578,7 @@ Then access REST API at `http://localhost:8770`
 - [x] MCP Prompts: `search` / `ingest` / `graph` / `context` / `compare`
 
 #### Phase 5 Extended Features 🔨 **Planned**
-- [ ] 🔨 **AI Agent Conversation Memory Real-time Vectorization** — When chatting with AI Agents (OpenClaw, Claude Code, Codex, Trae, WorkBuddy, QClaw, etc.), automatically vectorize conversation memories (like MEMORY.md) in real-time and ingest into the knowledge system, enabling permanent extended retrieval of conversation history. Reference MemPalace's session context management approach.
+- [x] ✅ **AI Agent Conversation Memory Real-time Vectorization** — When chatting with AI Agents (OpenClaw, Claude Code, Codex, Trae, WorkBuddy, QClaw, etc.), automatically vectorize conversation memories (like MEMORY.md) in real-time and ingest into the knowledge system, enabling permanent extended retrieval of conversation history. Reference MemPalace's session context management approach. Implemented with CLI, Web UI, and MCP interfaces.
 
 ### v0.3.0 Enhancement ✅ **Completed**
 - [x] Third-party library localization (vendor directory)

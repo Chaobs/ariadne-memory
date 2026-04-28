@@ -5,6 +5,40 @@ All notable changes to Ariadne will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2026-04-28
+
+### Added
+
+#### AI Agent Conversation Memory Real-time Vectorization
+- **Real-time vectorization** — Automatically vectorize AI agent conversation memories (e.g., WorkBuddy MEMORY.md) in real-time and ingest into the knowledge system
+- **Three‑layer architecture**:
+  - `ObservationIngestor`: Parse agent memory files (MEMORY.md, daily logs) with robust encoding detection (utf‑8‑sig → utf‑8 → gb18030 → latin‑1)
+  - `FileWatcher`: Monitor directories for new/changed files using watchdog, with debouncing (default 30s)
+  - `RealtimeVectorizer`: Coordinate ingestion and watching, provide unified API
+- **Multi‑interface support**:
+  - **CLI**: `ariadne memory watch`, `memory ingest‑observation`, `memory realtime‑status`, `memory realtime‑config`
+  - **Web UI**: REST API endpoints (`/api/realtime/watch`, `/stop`, `/ingest`, `/status`, `/config`)
+  - **MCP**: 5 new tools (`ariadne_realtime_watch`, `ariadne_realtime_stop`, `ariadne_realtime_ingest`, `ariadne_realtime_status`, `ariadne_realtime_config`)
+- **Platform adapters**: WorkBuddy, OpenClaw, Cursor, Windsurf, Generic
+- **Dual storage**: Creates both SQLite `Observation` records and ChromaDB vector documents
+- **Configuration**: Configurable watch paths, debounce interval, platform settings via CLI/Web UI
+
+#### Extended MCP Toolset
+- Added 5 real‑time vectorization tools to the MCP server
+- Tools support all parameters (paths, platforms, intervals) with schema validation
+- Integrated with existing MCP tool categorization
+
+#### Web UI Configuration & Statistics Panel
+- **Real‑time configuration panel** in Web UI Settings page
+- **Statistics dashboard** showing watched directories, ingested files, platform status
+- **Live status** via SSE streaming (optional)
+
+### Changed
+- **MCP tool count**: Increased from 13 to 18 tools
+- **CLI memory command group**: Extended with 4 new subcommands
+- **Web API**: Added 5 new endpoints under `/api/realtime/`
+- **Architecture**: Added `ariadne/realtime/` module with three core components
+
 ## [0.7.3] - 2026-04-27
 
 ### Fixed

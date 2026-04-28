@@ -318,7 +318,59 @@ ariadne rag health
 
 ---
 
-### 7. advanced — Advanced Features
+### 7. realtime — Real-time Agent Memory Vectorization
+
+```bash
+ariadne memory [COMMAND]
+```
+
+#### Subcommands
+
+| Command | Description |
+|---------|-------------|
+| `watch <PATH>` | Start real-time monitoring of agent memory directory |
+| `ingest-observation <FILE>` | Manually ingest an agent memory file (e.g., MEMORY.md) |
+| `realtime-status` | Show real-time vectorization status |
+| `realtime-config` | Configure real-time vectorization settings |
+
+#### Examples
+
+```bash
+# Start watching a directory for agent memory files
+ariadne memory watch /home/user/.workbuddy/memory/
+
+# Manually ingest a specific memory file
+ariadne memory ingest-observation /home/user/.workbuddy/memory/2026-04-28.md
+
+# Check real-time vectorization status
+ariadne memory realtime-status
+
+# Configure platform and debounce interval
+ariadne memory realtime-config --platform workbuddy --debounce 60
+
+# Stop watching (via Web UI or MCP tool)
+```
+
+#### Platform Adapters
+
+| Platform | Description |
+|----------|-------------|
+| WorkBuddy | WorkBuddy memory files (MEMORY.md, daily logs) |
+| OpenClaw | OpenClaw session memory files |
+| Cursor | Cursor AI agent memory files |
+| Windsurf | Windsurf IDE memory files |
+| Generic | Generic memory files (any text format) |
+
+#### Configuration
+
+Real-time vectorization settings can be configured via:
+- CLI: `ariadne memory realtime-config`
+- Web UI: Settings → Real-time Vectorization
+- MCP: `ariadne_realtime_config` tool
+
+---
+
+### 8. advanced — Advanced Features
 
 ```bash
 ariadne advanced [COMMAND]

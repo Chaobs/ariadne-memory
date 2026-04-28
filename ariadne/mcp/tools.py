@@ -428,6 +428,13 @@ class AriadneToolHandler:
             import logging as _log
             _log.getLogger(__name__).warning(f"Session memory tools not available: {e}")
 
+        # Realtime Vectorization Tools (Phase 1: AI agent conversation memory real-time vectorization)
+        self._tools["ariadne_realtime_watch"] = RealtimeWatchTool()
+        self._tools["ariadne_realtime_stop"] = RealtimeStopTool()
+        self._tools["ariadne_realtime_ingest"] = RealtimeIngestTool()
+        self._tools["ariadne_realtime_status"] = RealtimeStatusTool()
+        self._tools["ariadne_realtime_config"] = RealtimeConfigTool()
+
     def register(self, name: str, tool: MCPTool):
         """Register a new tool."""
         self._tools[name] = tool
@@ -445,7 +452,11 @@ class AriadneToolHandler:
         categories = {
             "search": ["ariadne_search", "ariadne_rag_search"],
             "ingest": ["ariadne_ingest", "ariadne_web_search"],
-            "memory": ["ariadne_memory_list", "ariadne_memory_create", "ariadne_memory_delete"],
+            "memory": [
+                "ariadne_memory_list", "ariadne_memory_create", "ariadne_memory_delete",
+                "ariadne_realtime_watch", "ariadne_realtime_stop", "ariadne_realtime_ingest",
+                "ariadne_realtime_status", "ariadne_realtime_config"
+            ],
             "graph": ["ariadne_graph_query", "ariadne_graph_explore"],
             "analytics": ["ariadne_stats", "ariadne_health_check", "ariadne_document_info"],
             "llm": ["ariadne_summarize"],
@@ -1671,5 +1682,380 @@ class WikiListTool(MCPTool):
             return {"error": f"Wiki module not available: {e}"}
         except Exception as e:
             logger.error(f"Wiki list error: {e}")
+            return {"error": str(e)}
+
+
+# ============================================================================
+# Realtime Vectorization Tools
+# ============================================================================
+
+@dataclass
+class RealtimeWatchTool(MCPTool):
+    """Start watching directories for AI agent memory files."""
+
+    def __init__(self):
+        super().__init__(
+            name="ariadne_realtime_watch",
+            description="Start watching directories for AI agent memory files (e.g., WorkBuddy's MEMORY.md) and ingest them in real-time.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "directories": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of directory paths to watch",
+                    },
+                    "recursive": {
+                        "type": "boolean",
+                        "description": "Watch subdirectories recursively",
+                        "default": True,
+                    },
+                    "memory": {
+                        "type": "string",
+                        "description": "Memory system name (default: 'default')",
+                        "default": "default",
+                    },
+                    "platform": {
+                        "type": "string",
+                        "description": "AI agent platform (generic, workbuddy, openclaw, cursor, windsurf, claudecode)",
+                        "default": "generic",
+                    },
+                },
+                "required": ["directories"],
+            },
+        )
+
+    def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute the watch command."""
+        directories = arguments.get("directories", [])
+        recursive = arguments.get("recursive", True)
+        memory = arguments.get("memory", "default")
+        platform = arguments.get("platform", "generic")
+
+        if not directories:
+            return {"error": "At least one directory is required"}
+
+        try:
+            from ariadne.realtime import RealtimeVectorizer
+            from ariadne.session.observation_store import Platform as ObsPlatform
+
+            # Map platform string to enum
+            platform_map = {
+                "generic": ObsPlatform.GENERIC,
+                "workbuddy": ObsPlatform.WORKBUDDY,
+                "openclaw": ObsPlatform.OPENCLAW,
+                "cursor": ObsPlatform.CURSOR,
+                "windsurf": ObsPlatform.WINDSURF,
+                "claudecode": ObsPlatform.CLAUDECODE,
+            }
+            platform_enum = platform_map.get(platform.lower(), ObsPlatform.GENERIC)
+
+            vectorizer = RealtimeVectorizer(default_memory_system=memory)
+            
+            # Update configuration if needed
+            if memory != "default":
+                vectorizer.update_config(default_memory_system=memory)
+
+            success = vectorizer.start_watching(
+                directories=directories,
+                recursive=recursive,
+            )
+
+            if success:
+                return {
+                    "success": True,
+                    "message": f"Started watching {len(directories)} directories",
+                    "directories": directories,
+                    "recursive": recursive,
+                    "memory": memory,
+                    "platform": platform,
+                }
+            else:
+                return {"error": "Failed to start watching"}
+
+        except ImportError as e:
+            return {"error": f"Realtime module not available: {e}"}
+        except Exception as e:
+            logger.error(f"Realtime watch error: {e}")
+            return {"error": str(e)}
+
+
+@dataclass
+class RealtimeStopTool(MCPTool):
+    """Stop all directory watchers."""
+
+    def __init__(self):
+        super().__init__(
+            name="ariadne_realtime_stop",
+            description="Stop all directory watchers for real-time vectorization.",
+            input_schema={
+                "type": "object",
+                "properties": {},
+            },
+        )
+
+    def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute the stop command."""
+        try:
+            from ariadne.realtime import RealtimeVectorizer
+
+            vectorizer = RealtimeVectorizer()
+            stopped = vectorizer.stop_watching()
+
+            return {
+                "success": True if stopped else False,
+                "message": "Stopped all directory watchers" if stopped else "Not watching",
+                "stopped": stopped,
+            }
+
+        except ImportError as e:
+            return {"error": f"Realtime module not available: {e}"}
+        except Exception as e:
+            logger.error(f"Realtime stop error: {e}")
+            return {"error": str(e)}
+
+
+@dataclass
+class RealtimeIngestTool(MCPTool):
+    """Manually ingest files/directories."""
+
+    def __init__(self):
+        super().__init__(
+            name="ariadne_realtime_ingest",
+            description="Manually ingest AI agent memory files or directories.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "paths": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of file or directory paths to ingest",
+                    },
+                    "memory": {
+                        "type": "string",
+                        "description": "Memory system name (default: 'default')",
+                        "default": "default",
+                    },
+                    "platform": {
+                        "type": "string",
+                        "description": "AI agent platform (generic, workbuddy, openclaw, cursor, windsurf, claudecode)",
+                        "default": "generic",
+                    },
+                    "create_observations": {
+                        "type": "boolean",
+                        "description": "Create observation records",
+                        "default": True,
+                    },
+                    "ingest_as_documents": {
+                        "type": "boolean",
+                        "description": "Ingest content as documents into vector storage",
+                        "default": True,
+                    },
+                },
+                "required": ["paths"],
+            },
+        )
+
+    def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute the ingest command."""
+        paths = arguments.get("paths", [])
+        memory = arguments.get("memory", "default")
+        platform = arguments.get("platform", "generic")
+        create_observations = arguments.get("create_observations", True)
+        ingest_as_documents = arguments.get("ingest_as_documents", True)
+
+        if not paths:
+            return {"error": "At least one path is required"}
+
+        try:
+            from ariadne.realtime import RealtimeVectorizer
+            from ariadne.session.observation_store import Platform as ObsPlatform
+            from pathlib import Path
+
+            # Map platform string to enum
+            platform_map = {
+                "generic": ObsPlatform.GENERIC,
+                "workbuddy": ObsPlatform.WORKBUDDY,
+                "openclaw": ObsPlatform.OPENCLAW,
+                "cursor": ObsPlatform.CURSOR,
+                "windsurf": ObsPlatform.WINDSURF,
+                "claudecode": ObsPlatform.CLAUDECODE,
+            }
+            platform_enum = platform_map.get(platform.lower(), ObsPlatform.GENERIC)
+
+            vectorizer = RealtimeVectorizer(default_memory_system=memory)
+            
+            results = []
+            total_obs = 0
+            total_docs = 0
+
+            for path in paths:
+                path_obj = Path(path)
+                if path_obj.is_file():
+                    observations, doc_ids = vectorizer.ingest_file(
+                        path,
+                        create_observations=create_observations,
+                        ingest_as_documents=ingest_as_documents,
+                        platform=platform_enum,
+                    )
+                elif path_obj.is_dir():
+                    observations, doc_ids = vectorizer.ingest_directory(
+                        path,
+                        create_observations=create_observations,
+                        ingest_as_documents=ingest_as_documents,
+                        platform=platform_enum,
+                    )
+                else:
+                    return {"error": f"Path not found: {path}"}
+
+                obs_count = len(observations)
+                doc_count = len(doc_ids)
+                results.append({
+                    "path": path,
+                    "observations_created": obs_count,
+                    "documents_added": doc_count,
+                })
+                total_obs += obs_count
+                total_docs += doc_count
+
+            return {
+                "success": True,
+                "message": f"Ingested {len(paths)} paths",
+                "results": results,
+                "total_observations": total_obs,
+                "total_documents": total_docs,
+            }
+
+        except ImportError as e:
+            return {"error": f"Realtime module not available: {e}"}
+        except Exception as e:
+            logger.error(f"Realtime ingest error: {e}")
+            return {"error": str(e)}
+
+
+@dataclass
+class RealtimeStatusTool(MCPTool):
+    """Get real-time vectorization status."""
+
+    def __init__(self):
+        super().__init__(
+            name="ariadne_realtime_status",
+            description="Get current status of real-time vectorization.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "memory": {
+                        "type": "string",
+                        "description": "Memory system name (default: 'default')",
+                        "default": "default",
+                    },
+                },
+            },
+        )
+
+    def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute the status command."""
+        memory = arguments.get("memory", "default")
+
+        try:
+            from ariadne.realtime import RealtimeVectorizer
+
+            vectorizer = RealtimeVectorizer(default_memory_system=memory)
+            status = vectorizer.get_status()
+            config = vectorizer.get_config()
+
+            return {
+                "success": True,
+                "status": status,
+                "config": config,
+            }
+
+        except ImportError as e:
+            return {"error": f"Realtime module not available: {e}"}
+        except Exception as e:
+            logger.error(f"Realtime status error: {e}")
+            return {"error": str(e)}
+
+
+@dataclass
+class RealtimeConfigTool(MCPTool):
+    """Get or update real-time vectorization configuration."""
+
+    def __init__(self):
+        super().__init__(
+            name="ariadne_realtime_config",
+            description="Get or update real-time vectorization configuration.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": "Action: 'get' or 'update'",
+                        "enum": ["get", "update"],
+                        "default": "get",
+                    },
+                    "default_memory_system": {
+                        "type": "string",
+                        "description": "Default memory system name",
+                    },
+                    "watch_patterns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "File patterns to watch",
+                    },
+                    "debounce_seconds": {
+                        "type": "number",
+                        "description": "Debounce interval in seconds",
+                        "minimum": 0.1,
+                        "maximum": 60.0,
+                    },
+                },
+            },
+        )
+
+    def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute the config command."""
+        action = arguments.get("action", "get")
+        memory = arguments.get("memory", "default")
+
+        try:
+            from ariadne.realtime import RealtimeVectorizer
+
+            vectorizer = RealtimeVectorizer(default_memory_system=memory)
+
+            if action == "get":
+                config = vectorizer.get_config()
+                return {
+                    "success": True,
+                    "config": config,
+                }
+            elif action == "update":
+                updates = {}
+                if "default_memory_system" in arguments:
+                    updates["default_memory_system"] = arguments["default_memory_system"]
+                if "watch_patterns" in arguments:
+                    updates["watch_patterns"] = arguments["watch_patterns"]
+                if "debounce_seconds" in arguments:
+                    updates["debounce_seconds"] = arguments["debounce_seconds"]
+
+                if not updates:
+                    return {"error": "No configuration parameters provided"}
+
+                success = vectorizer.update_config(**updates)
+                if success:
+                    return {
+                        "success": True,
+                        "message": "Configuration updated",
+                        "updates": updates,
+                    }
+                else:
+                    return {"error": "Failed to update configuration"}
+            else:
+                return {"error": f"Invalid action: {action}"}
+
+        except ImportError as e:
+            return {"error": f"Realtime module not available: {e}"}
+        except Exception as e:
+            logger.error(f"Realtime config error: {e}")
             return {"error": str(e)}
 

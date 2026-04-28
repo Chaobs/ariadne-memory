@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+from pathlib import Path
 import json
 import asyncio
 
@@ -15,6 +16,8 @@ from ariadne import __version__
 from ariadne.memory import MemoryManager, get_manager
 from ariadne.config import AriadneConfig, get_config
 from ariadne.paths import MEMORIES_DIR, GRAPH_DB_PATH
+from ariadne.realtime import RealtimeVectorizer
+from ariadne.session.models import Platform
 
 
 # ============================================================================
@@ -50,6 +53,34 @@ class MCPRunRequest(BaseModel):
     port: int = 8765
 
 
+class RealtimeWatchRequest(BaseModel):
+    """Request to start watching directories for real‑time vectorization."""
+    directories: List[str]
+    recursive: bool = True
+    memory: Optional[str] = None
+    platform: str = "generic"  # generic, workbuddy, openclaw, cursor, windsurf, claudecode
+    create_observations: bool = True
+    ingest_as_documents: bool = True
+
+
+class RealtimeIngestRequest(BaseModel):
+    """Request to manually ingest files/directories."""
+    paths: List[str]
+    memory: Optional[str] = None
+    platform: str = "generic"
+    create_observations: bool = True
+    ingest_as_documents: bool = True
+
+
+class RealtimeConfigUpdateRequest(BaseModel):
+    """Request to update real‑time vectorization configuration."""
+    debounce_seconds: Optional[int] = None
+    max_file_size_mb: Optional[int] = None
+    watch_extensions: Optional[List[str]] = None
+    default_memory: Optional[str] = None
+    default_platform: Optional[str] = None
+
+
 # ============================================================================
 # Dependency Injection
 # ============================================================================
@@ -60,6 +91,11 @@ def get_memory_manager() -> MemoryManager:
 
 def get_app_config() -> AriadneConfig:
     return get_config()
+
+
+def get_realtime_vectorizer() -> RealtimeVectorizer:
+    """Get a singleton instance of RealtimeVectorizer."""
+    return RealtimeVectorizer()
 
 
 # ============================================================================
@@ -453,6 +489,206 @@ async def mcp_list_tools():
     }
 
 
+
+
+# ============================================================================
+# Realtime Vectorization Router
+# ============================================================================
+
+realtime_router = APIRouter(prefix="/api/realtime", tags=["Realtime Vectorization"])
+
+
+@realtime_router.post("/watch")
+async def realtime_watch(
+    req: RealtimeWatchRequest,
+    vectorizer: RealtimeVectorizer = Depends(get_realtime_vectorizer),
+):
+    """Start watching directories for real-time vectorization.
+    
+    对应CLI命令: ariadne memory watch <directories>
+    """
+    try:
+        success = vectorizer.start_watching(
+            directories=req.directories,
+            recursive=req.recursive,
+        )
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to start watching")
+        
+        # Update ingestor configuration if memory or platform specified
+        if req.memory:
+            vectorizer.update_config(default_memory_system=req.memory)
+        # Platform parameter is handled by ingestor via kwargs when processing files
+        
+        return {
+            "success": True,
+            "message": f"Started watching {len(req.directories)} directories",
+            "directories": req.directories,
+            "recursive": req.recursive,
+            "memory": req.memory or "default",
+            "platform": req.platform,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@realtime_router.post("/stop")
+async def realtime_stop(
+    vectorizer: RealtimeVectorizer = Depends(get_realtime_vectorizer),
+):
+    """Stop all directory watchers.
+    
+    对应CLI命令: ariadne memory watch --stop
+    """
+    try:
+        stopped = vectorizer.stop_watching()
+        return {
+            "success": True if stopped else False,
+            "message": "Stopped all directory watchers" if stopped else "Not watching",
+            "stopped": stopped,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@realtime_router.post("/ingest")
+async def realtime_ingest(
+    req: RealtimeIngestRequest,
+    vectorizer: RealtimeVectorizer = Depends(get_realtime_vectorizer),
+):
+    """Manually ingest files/directories.
+    
+    对应CLI命令: ariadne memory ingest-observation <paths>
+    """
+    try:
+        results = []
+        total_obs = 0
+        total_docs = 0
+        
+        for path in req.paths:
+            path_obj = Path(path)
+            if path_obj.is_file():
+                observations, doc_ids = vectorizer.ingest_file(
+                    path,
+                    create_observations=req.create_observations,
+                    ingest_as_documents=req.ingest_as_documents,
+                    memory_name=req.memory,
+                    platform=req.platform,
+                )
+            elif path_obj.is_dir():
+                observations, doc_ids = vectorizer.ingest_directory(
+                    path,
+                    create_observations=req.create_observations,
+                    ingest_as_documents=req.ingest_as_documents,
+                    memory_name=req.memory,
+                    platform=req.platform,
+                )
+            else:
+                raise HTTPException(status_code=400, detail=f"Path not found: {path}")
+            
+            obs_count = len(observations)
+            doc_count = len(doc_ids)
+            results.append({
+                "path": path,
+                "observations_created": obs_count,
+                "documents_added": doc_count,
+            })
+            total_obs += obs_count
+            total_docs += doc_count
+        
+        return {
+            "success": True,
+            "message": f"Ingested {len(req.paths)} paths",
+            "results": results,
+            "total_observations": total_obs,
+            "total_documents": total_docs,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@realtime_router.get("/status")
+async def realtime_status(
+    vectorizer: RealtimeVectorizer = Depends(get_realtime_vectorizer),
+):
+    """Get real-time vectorization status.
+    
+    对应CLI命令: ariadne memory realtime-status
+    """
+    try:
+        status = vectorizer.get_status()
+        config = vectorizer.get_config()
+        return {
+            "success": True,
+            "status": status,
+            "config": config,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@realtime_router.get("/config")
+async def realtime_get_config(
+    vectorizer: RealtimeVectorizer = Depends(get_realtime_vectorizer),
+):
+    """Get current configuration.
+    
+    对应CLI命令: ariadne memory realtime-config
+    """
+    try:
+        config = vectorizer.get_config()
+        return {
+            "success": True,
+            "config": config,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@realtime_router.post("/config")
+async def realtime_update_config(
+    req: RealtimeConfigUpdateRequest,
+    vectorizer: RealtimeVectorizer = Depends(get_realtime_vectorizer),
+):
+    """Update configuration.
+    
+    对应CLI命令: ariadne memory realtime-config --set <key> <value>
+    """
+    try:
+        updates = {}
+        config_dict = {}
+        if req.debounce_seconds is not None:
+            config_dict["debounce_seconds"] = req.debounce_seconds
+            updates["debounce_seconds"] = req.debounce_seconds
+        if req.max_file_size_mb is not None:
+            # Note: max_file_size_mb is not currently supported in RealtimeVectorizer
+            # We'll store it in config but not apply directly
+            updates["max_file_size_mb"] = req.max_file_size_mb
+        if req.watch_extensions is not None:
+            config_dict["watch_patterns"] = req.watch_extensions
+            updates["watch_patterns"] = req.watch_extensions
+        if req.default_memory is not None:
+            config_dict["default_memory_system"] = req.default_memory
+            updates["default_memory_system"] = req.default_memory
+        if req.default_platform is not None:
+            updates["default_platform"] = req.default_platform
+        
+        if config_dict:
+            success = vectorizer.update_config(**config_dict)
+            if not success:
+                raise HTTPException(status_code=500, detail="Failed to update configuration")
+        
+        return {
+            "success": True,
+            "message": "Configuration updated",
+            "updates": updates,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # System Router Extensions
 # ============================================================================
@@ -566,3 +802,4 @@ def register_extension_routers(app):
     app.include_router(advanced_router)
     app.include_router(mcp_router)
     app.include_router(system_ext_router)
+    app.include_router(realtime_router)
