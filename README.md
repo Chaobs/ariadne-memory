@@ -35,43 +35,18 @@
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| 🗂️ **Multi-source Ingestion** | Supports Markdown, Word, PPT, PDF, TXT, Mind Maps, Code and more | ✅ |
-| 🔍 **Semantic Search** | Vector database-based semantic similarity search | ✅ |
-| 🧠 **Persistent Memory** | ChromaDB local storage, your data stays with you | ✅ |
-| 📁 **Multiple Memory Systems** | Create independent systems for different domains | ✅ |
-| 🔗 **Knowledge Graph** | Auto-identify entities and relationships | ✅ |
-| 🤖 **AI Enhancement** | Supports DeepSeek / Claude / Qwen / Gemini / Kimi / MiniMax / GLM / Grok | ✅ |
-| 🧮 **System Merging** | Merge multiple memory systems | ✅ |
-| 💾 **Export/Import** | Export/import memory systems for backup and sharing | ✅ |
-| 📚 **Media Support** | EPUB/MOBI, Image OCR, Scanned PDF, Academic metadata | ✅ |
-| 🔌 **MCP Server** | MCP tools interface for Claude Code / WorkBuddy / Cursor | ✅ |
-| 🖥️ **Dual Interface** | CLI (Typer + Rich) + Web UI (React + FastAPI), both with full features | ✅ |
-| 🕸️ **Web UI** | Modern React SPA with semantic search, memory management, D3 graph, settings | ✅ |
-| 🕸️ **D3 Graph** | Interactive force-directed knowledge graph with zoom/pan/drag | ✅ |
-| 🌙 **Dark Mode** | Toggle light/dark theme (stored in localStorage) | ✅ |
-| 📱 **Responsive** | Mobile-friendly layout (adapts to <768px and <480px) | ✅ |
-| 🌍 **Multi-language** | Supports 8 languages (zh_CN/zh_TW/ja/en/fr/es/ru/ar) | ✅ |
-| 📝 **Smart Summarization** | LLM-driven multi-language summarization | ✅ |
-| 📊 **Visualization** | Interactive knowledge graph (HTML / DOT / Mermaid) | ✅ |
-| 📤 **Multi-format Export** | Markdown, HTML, Word, PDF export | ✅ |
-| 📦 **Localized Dependencies** | Third-party packages bundled, version consistency | ✅ |
-| 🎯 **Binary Support** | Auto-handle binary files, extract filenames as references | ✅ |
+| 🗂️ **Multi-source Ingestion** | Supports 30+ formats: Markdown, Word, PPT, PDF, TXT, Mind Maps, Code, EPUB, Images, Web, Email, Video, Audio, and more via markitdown | ✅ |
+| 🔀 **RAG Pipeline** | Hybrid search (vector+BM25) + Reranking + Citations + Smart summarization | ✅ |
+| 🔗 **Knowledge Graph** | Auto-identify entities and relationships with interactive D3 visualization, temporal support | ✅ |
+| 🧠 **Persistent Memory** | ChromaDB local storage with multiple memory systems, export/import, 4-layer memory stack | ✅ |
+| 🤖 **AI Enhancement** | MCP Server for Claude Code/WorkBuddy/Cursor, Skill integration, 5-hook lifecycle, auto-save hooks | ✅ |
+| 📖 **LLM Wiki** | Karpathy-style persistent wiki with two-step CoT ingest, Q&A, lint, Obsidian import | ✅ |
+| 🌍 **Multi-language** | Supports 8 languages (zh_CN/zh_TW/ja/en/fr/es/ru/ar) with full UI localization | ✅ |
+| 🖥️ **Dual Interface** | CLI (Typer + Rich) + Web UI (React + FastAPI), both with full feature parity | ✅ |
+| 🔌 **Plugin System** | Extensible ingestor registry, 4 lifecycle hooks, plugin discovery via entry_points | ✅ |
+| 💾 **Export/Import** | Export/import memory systems for backup and sharing, multi-format support | ✅ |
+| 📦 **Localized Dependencies** | Third-party packages bundled, model cache local, version consistency | ✅ |
 | 🔄 **Universal Ingestion** | markitdown support for HTML/RSS/Jupyter/RTF/ODF 22+ formats | ✅ |
-| ⏱️ **Deferred Deletion** | Mark-batch delete to avoid SQLite lock contention | ✅ |
-| 🔀 **RAG Pipeline** | Hybrid search (vector+BM25) + Reranking + Citations | ✅ |
-| 📌 **Smart Citations** | Auto-generate highlighted document citations | ✅ |
-| 🧠 **4-Layer Memory Stack** | L0 Identity + L1 Narrative + L2 On-Demand + L3 Deep Search | ✅ |
-| 🔐 **WAL Audit Logging** | MCP operation audit trail with metrics | ✅ |
-| ✅ **Schema Validation** | JSON Schema-based MCP parameter validation | ✅ |
-| 🗄️ **Closet Index** | AAAK compressed index for fast drawer lookup | ✅ |
-| ⏰ **Temporal KG** | Knowledge graph with valid_from/valid_to temporal support | ✅ |
-| 💾 **Auto-Save Hooks** | Stop/PreCompact/Session hooks for automatic persistence | ✅ |
-| 🤖 **Claude Code Integration** | Tool tracking, file modification, project context | ✅ |
-| 📖 **LLM Wiki** | Karpathy-style persistent wiki with two-step CoT ingest, Q&A, lint | ✅ |
-| 🔴 **SSE Real-time Updates** | Server-Sent Events for live observation/summary updates | ✅ |
-| 🔄 **5-Hook Lifecycle** | SessionStart/UserPromptSubmit/PostToolUse/Stop/SessionEnd | ✅ |
-| 🎯 **Content-Hash Dedup** | SHA256 deduplication with 30-second sliding window | ✅ |
-| 🖥️ **Session Memory UI** | Web UI dedicated page for real-time session observation display | ✅ |
 
 ---
 
